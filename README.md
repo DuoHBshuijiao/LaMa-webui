@@ -46,14 +46,13 @@
 
 ## 快速启动
 
-当前机器已经完成依赖与模型部署，直接运行：
+直接运行（或双击 `run.bat`）：
 
 ```powershell
-cd D:\Lama
 .\run.ps1
 ```
 
-或双击 `run.bat`。浏览器会自动打开 <http://127.0.0.1:7860>。
+第一次运行会自动完成部署：创建 `.venv`、安装 `requirements.txt`、下载并校验模型，随后启动服务（一次性，约 5–15 分钟，取决于网速）。之后每次启动只需几秒。浏览器会自动打开 <http://127.0.0.1:7860>。
 
 常用参数：
 
@@ -62,21 +61,25 @@ cd D:\Lama
 .\run.ps1 -Port 7861          # 换端口
 $env:LAMA_DEVICE = "cpu"; .\run.ps1   # 强制使用 CPU
 $env:LAMA_DEVICE = "cuda"; .\run.ps1  # 强制使用显卡
+
+# 首次部署时网络直连 PyPI / GitHub 太慢，可换镜像（模型仍做 SHA256 校验）
+.\run.ps1 -IndexUrl https://mirrors.cloud.tencent.com/pypi/simple `
+          -ModelUrl https://gh-proxy.com/https://github.com/enesmsahin/simple-lama-inpainting/releases/download/v0.1.0/big-lama.pt
 ```
 
 ## 从零安装
 
-要求：Windows、Python 3.10+（当前环境 3.12）。CPU 方案约需 2GB 磁盘；CUDA 版 PyTorch 约需 7GB。
+要求：Windows、Python 3.11–3.13（推荐 3.12；`torch 2.7.1` 尚未提供 3.14 的 wheel，`numpy 2.5+` 又要求 3.12+）。CPU 方案约需 2GB 磁盘；CUDA 版 PyTorch 约需 7GB。
 
 ```powershell
-cd D:\Lama
-.\scripts\setup.ps1
+.\scripts\setup.ps1          # 自动挑选 3.12 / 3.13 / 3.11
+.\scripts\setup.ps1 -Cuda    # 一并安装 CUDA 12.8 版 torch
 ```
 
 脚本会创建 `.venv`、安装 `requirements.txt`、下载并校验 `models/big-lama.pt`。也可以分步执行：
 
 ```powershell
-python -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe scripts\download_model.py
 .\run.ps1
@@ -84,7 +87,13 @@ python -m venv .venv
 
 ### 可选：CUDA 加速
 
-PyPI 在 Windows 上提供的 `torch` 是 CPU 版本。要使用 NVIDIA 显卡：
+PyPI 在 Windows 上提供的 `torch` 是 CPU 版本。要使用 NVIDIA 显卡，可以在部署时直接加开关（也适用于已有环境）：
+
+```powershell
+.\scripts\setup.ps1 -Cuda
+```
+
+或手动重装：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install --force-reinstall `
@@ -219,6 +228,9 @@ D:\Lama
 - 第三方许可见 `THIRD_PARTY_LICENSES/`。
 
 ## 故障排查
+
+**部署时报 `No matching distribution found for numpy==2.5.4`**  
+`numpy 2.5+` 只支持 Python 3.12+，而 `torch 2.7.1` 又没有 3.14 的 wheel。用 3.11–3.13 即可；`.venv` 建错版本时删掉它再运行 `.\run.ps1`，脚本会自动挑选 3.12 / 3.13 / 3.11。
 
 **模型未就绪 / `503`**  
 确认 `models/big-lama.pt` 存在且校验通过；查看启动终端里的 `lama.workbench` 日志。

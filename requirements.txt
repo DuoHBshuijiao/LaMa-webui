@@ -1,9 +1,11 @@
 # Runtime dependencies for LAMA 清痕.
+# Python 3.11–3.13.  torch 2.7.1 ships wheels only up to cp313, so 3.14 is not
+# supported yet; numpy 2.5+ requires Python >=3.12, so it stays on the 2.4 line.
 # On Windows the PyPI torch wheel is CPU-only.  See README.md for CUDA.
 fastapi==0.163.0
 uvicorn[standard]==0.54.0
 python-multipart==0.0.33
 pillow==13.0.0
-numpy==2.5.4
+numpy==2.4.6
 opencv-python-headless==5.0.0.93
 torch==2.7.1
