@@ -1271,6 +1271,14 @@
       updateSliderFill(el.feather);
     });
 
+    // Dragging a slider leaves it focused: the focus ring stays on the control
+    // and the canvas never gets the keystrokes.  Hand focus back on release so
+    // the shortcuts work again; keyboard users keep focus while nudging.
+    [el.brushSize, el.dilate, el.feather].forEach((slider) => {
+      slider.addEventListener("pointerup", () => slider.blur());
+      slider.addEventListener("pointercancel", () => slider.blur());
+    });
+
     el.undoBtn.addEventListener("click", undo);
     el.redoBtn.addEventListener("click", redo);
     el.clearBtn.addEventListener("click", clearMask);
@@ -1413,10 +1421,28 @@
 
     document.addEventListener("keydown", (event) => {
       const target = event.target;
-      const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
+      const tag = target?.tagName;
+      const isRange = tag === "INPUT" && target?.type === "range";
+      // Only text entry swallows shortcuts.  A focused slider used to block
+      // B / E / H / Space after the brush size had been dragged.
+      const typing =
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable ||
+        (tag === "INPUT" &&
+          !isRange &&
+          !["checkbox", "radio", "button", "submit", "reset", "file", "color"].includes(target?.type));
       if (typing || el.helpDialog.open) return;
 
       const key = event.key.toLowerCase();
+      if (
+        isRange &&
+        ["arrowleft", "arrowright", "arrowup", "arrowdown", "home", "end", "pageup", "pagedown"].includes(key)
+      ) {
+        // Let a focused slider keep its native keyboard controls; its own
+        // "input" handler already syncs the state.
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && key === "z") {
         event.preventDefault();
         if (event.shiftKey) redo();
