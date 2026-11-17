@@ -271,7 +271,7 @@
           <div class="stage-tip" id="stageTip" hidden>
             <span class="tip-key">B</span> 涂抹水印
             <span class="tip-sep"></span>
-            <span class="tip-key">E</span> 擦除
+            <span class="tip-key">X</span> 切换画笔/橡皮
             <span class="tip-sep"></span>
             <span class="tip-key">空格</span> 拖动
             <span class="tip-sep"></span>
@@ -289,6 +289,8 @@
           <div class="footer-shortcuts">
             <span><kbd>B</kbd> 画笔</span>
             <span><kbd>E</kbd> 橡皮</span>
+            <span><kbd>X</kbd> 切换</span>
+            <span><kbd>[</kbd><kbd>]</kbd> 尺寸</span>
             <span><kbd>Space</kbd> 拖拽</span>
             <span><kbd>Ctrl</kbd><kbd>Z</kbd> 撤销</span>
           </div>
@@ -322,7 +324,7 @@
             </div>
 
             <div class="slider-row">
-              <div class="slider-label"><label for="brushSize">笔刷尺寸</label><output id="brushValue">56 px</output></div>
+              <div class="slider-label"><label for="brushSize" id="brushLabel">画笔尺寸</label><output id="brushValue">56 px</output></div>
               <input type="range" id="brushSize" min="8" max="220" step="2" value="56">
               <div class="slider-scale"><span>精细</span><span>大面积</span></div>
               <div class="slider-preview-note"><i></i>调整时，画面上会显示笔刷实际大小</div>
@@ -434,7 +436,7 @@
     <div class="help-body">
       <ol class="help-steps">
         <li><span>01</span><div><strong>上传画面</strong><p>拖入、选择或直接粘贴一张照片。支持 JPG、PNG、WebP，最大 40MB。</p></div></li>
-        <li><span>02</span><div><strong>涂抹水印</strong><p>用画笔覆盖水印；拖动笔刷尺寸时，画面上会显示同尺寸圆环。用橡皮修掉多涂的部分，水印有投影时把遮罩扩展调到 8–12px。</p></div></li>
+        <li><span>02</span><div><strong>涂抹水印</strong><p>用画笔覆盖水印；拖动笔刷尺寸时，画面上会显示同尺寸圆环。按住 <kbd>X</kbd> 可临时换成橡皮擦掉多涂的部分，松开回到画笔；两张笔刷的尺寸分别记忆。水印有投影时把遮罩扩展调到 8–12px。</p></div></li>
         <li><span>03</span><div><strong>重建画面</strong><p>点击“开始去水印”。LaMa 会在本机完成推理；在对比视图里拖动画面任意位置即可查看前后效果，然后下载 PNG。</p></div></li>
       </ol>
       <div class="help-grid">
@@ -443,6 +445,8 @@
           <dl class="shortcut-list">
             <div><dt><kbd>B</kbd></dt><dd>画笔</dd></div>
             <div><dt><kbd>E</kbd></dt><dd>橡皮</dd></div>
+            <div><dt><kbd>X</kbd></dt><dd>画笔 / 橡皮切换，长按临时切换</dd></div>
+            <div><dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>笔刷尺寸（Shift 大步）</dd></div>
             <div><dt><kbd>H</kbd> / <kbd>Space</kbd></dt><dd>拖动画布</dd></div>
             <div><dt><kbd>双指</kbd></dt><dd>平移画布</dd></div>
             <div><dt><kbd>↑↓←→</kbd></dt><dd>移动画面（Shift 加速）</dd></div>
@@ -463,7 +467,7 @@
 
   <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 
-  <script src="/static/app.js?v=20261116j" defer></script>
+  <script src="/static/app.js?v=20261117b" defer></script>
 </body>
 </html>
 

@@ -56,6 +56,7 @@
     railBrushValue: $("#railBrushValue"),
     brushSize: $("#brushSize"),
     brushValue: $("#brushValue"),
+    brushLabel: $("#brushLabel"),
     dilate: $("#dilate"),
     dilateValue: $("#dilateValue"),
     feather: $("#feather"),
@@ -98,7 +99,7 @@
     panX: 0,
     panY: 0,
     tool: "brush",
-    brush: 56,
+    sizes: { brush: 56, eraser: 96 },
     dilate: 6,
     feather: 2,
     maxSide: 1600,
@@ -116,6 +117,7 @@
     ready: false,
     health: null,
     spaceDown: false,
+    toolHold: null,
     procTimer: null,
     procStarted: 0,
     lastPointer: null,
@@ -420,7 +422,7 @@
     el.artboard.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px)) scale(${state.zoom})`;
     updateZoomLabel();
     updateCompareOverlay();
-    if (!el.brushPreview.hidden) placeBrushPreview(state.brush);
+    if (!el.brushPreview.hidden) placeBrushPreview(activeSize());
   }
 
   function clampPan() {
@@ -655,7 +657,7 @@
     const stroke = {
       type: "stroke",
       mode: eraser ? "eraser" : "brush",
-      size: Math.max(1, state.brush * scale),
+      size: Math.max(1, activeSize() * scale),
       points: [point],
     };
     state.actions.push(stroke);
@@ -851,7 +853,7 @@
 
   function showBrushPreview(duration = 1200) {
     if (!state.image || state.busy || state.mode !== "edit" || state.tool === "pan") return;
-    const size = state.brush;
+    const size = activeSize();
     el.brushPreview.hidden = false;
     el.brushPreview.style.setProperty("--brush-size", `${size}px`);
     el.brushPreviewRing.classList.toggle("is-eraser", state.tool === "eraser");
@@ -881,8 +883,8 @@
     const stageRect = el.stage.getBoundingClientRect();
     el.brushCursor.style.left = `${event.clientX - stageRect.left}px`;
     el.brushCursor.style.top = `${event.clientY - stageRect.top}px`;
-    el.brushCursor.style.width = `${state.brush}px`;
-    el.brushCursor.style.height = `${state.brush}px`;
+    el.brushCursor.style.width = `${activeSize()}px`;
+    el.brushCursor.style.height = `${activeSize()}px`;
     el.brushCursor.classList.toggle("is-eraser", state.tool === "eraser");
     hideBrushPreview();
     el.brushCursor.hidden = false;
@@ -1147,6 +1149,50 @@
     }
   }
 
+  // ------------------------------------------------------------ brush size
+  // Brush and eraser keep their own size, so switching tools no longer forces
+  // one shared number on both.
+  function activeSize() {
+    return state.sizes[state.tool === "eraser" ? "eraser" : "brush"];
+  }
+
+  function syncBrushControls() {
+    const size = activeSize();
+    el.brushSize.value = String(size);
+    el.brushValue.textContent = `${size} px`;
+    el.railBrushValue.textContent = String(size);
+    el.brushLabel.textContent = state.tool === "eraser" ? "橡皮尺寸" : "画笔尺寸";
+    updateSliderFill(el.brushSize);
+    el.brushCursor.style.width = `${size}px`;
+    el.brushCursor.style.height = `${size}px`;
+  }
+
+  function setActiveSize(value) {
+    const size = clamp(Math.round(Number(value) || activeSize()), 8, 220);
+    state.sizes[state.tool === "eraser" ? "eraser" : "brush"] = size;
+    syncBrushControls();
+    return size;
+  }
+
+  // Tap X to swap brush and eraser; hold it to borrow the other tool for as
+  // long as the key is down and get the previous one back on release.
+  const TOOL_HOLD_MS = 260;
+
+  function toggleTool(event) {
+    if (event.repeat || state.toolHold) return;
+    const from = state.tool === "pan" ? "brush" : state.tool;
+    const to = from === "brush" ? "eraser" : "brush";
+    state.toolHold = { from, to, at: performance.now() };
+    setTool(to);
+  }
+
+  function releaseToolHold() {
+    const hold = state.toolHold;
+    if (!hold) return;
+    state.toolHold = null;
+    if (performance.now() - hold.at >= TOOL_HOLD_MS) setTool(hold.from);
+  }
+
   // ------------------------------------------------------------------ tool
   function setTool(tool) {
     state.tool = tool === "eraser" || tool === "pan" ? tool : "brush";
@@ -1157,6 +1203,8 @@
     if (state.tool === "pan") {
       el.brushCursor.hidden = true;
       hideBrushPreview();
+    } else {
+      syncBrushControls();
     }
   }
 
@@ -1252,12 +1300,9 @@
     });
 
     el.brushSize.addEventListener("input", () => {
-      state.brush = Number(el.brushSize.value);
-      el.brushValue.textContent = `${state.brush} px`;
-      el.railBrushValue.textContent = String(state.brush);
-      el.brushCursor.style.width = `${state.brush}px`;
-      el.brushCursor.style.height = `${state.brush}px`;
-      updateSliderFill(el.brushSize);
+      const size = setActiveSize(el.brushSize.value);
+      el.brushCursor.style.width = `${size}px`;
+      el.brushCursor.style.height = `${size}px`;
       showBrushPreview();
     });
     el.dilate.addEventListener("input", () => {
@@ -1488,18 +1533,23 @@
         applyTransform();
         return;
       }
-      if (key === "b") setTool("brush");
-      else if (key === "e") setTool("eraser");
-      else if (key === "h") setTool("pan");
-      else if (key === "[" || key === "]") {
-        const delta = key === "[" ? -4 : 4;
-        state.brush = clamp(state.brush + delta, 8, 220);
-        el.brushSize.value = String(state.brush);
-        el.brushValue.textContent = `${state.brush} px`;
-        el.railBrushValue.textContent = String(state.brush);
-        updateSliderFill(el.brushSize);
+      if (key === "x") {
+        toggleTool(event);
+        return;
+      }
+      if (key === "b" || key === "e" || key === "h") {
+        // An explicit pick wins over a pending long-press swap.
+        state.toolHold = null;
+        setTool(key === "b" ? "brush" : key === "e" ? "eraser" : "pan");
+        return;
+      }
+      if (key === "[" || key === "]") {
+        const step = event.shiftKey ? 20 : 4;
+        setActiveSize(activeSize() + (key === "[" ? -step : step));
         showBrushPreview();
-      } else if (key === "?") {
+        return;
+      }
+      if (key === "?") {
         openHelp();
       } else if (key === "escape" && state.mode === "edit" && state.result) {
         setMode("compare");
@@ -1511,11 +1561,17 @@
         state.spaceDown = false;
         el.artboard.classList.remove("is-pan-ready");
       }
+      if (event.key.toLowerCase() === "x") releaseToolHold();
     });
 
     window.addEventListener("blur", () => {
       if (state.gesture) endGesture();
       state.spaceDown = false;
+      if (state.toolHold) {
+        const hold = state.toolHold;
+        state.toolHold = null;
+        setTool(hold.from);
+      }
       el.artboard.classList.remove("is-pan-ready");
       el.brushCursor.hidden = true;
     });
