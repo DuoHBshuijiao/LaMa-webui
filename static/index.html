@@ -7,7 +7,7 @@
   <meta name="description" content="LaMa 单帧去水印工作台：在本机涂抹水印区域，用大遮罩修复模型重建画面纹理。">
   <title>LAMA 清痕 · 单帧去水印工作台</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20261117e">
+  <link rel="stylesheet" href="/static/styles.css?v=20261118a">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -411,8 +411,13 @@
               <button type="button" class="ghost-button" id="batchRunBtn">批量去水印</button>
               <button type="button" class="ghost-button" id="batchExportBtn">导出全部 ZIP</button>
             </div>
+            <div class="batch-order">
+              <button type="button" class="ghost-button" id="movePrevBtn" aria-label="把当前图片前移">← 前移</button>
+              <button type="button" class="ghost-button" id="moveNextBtn" aria-label="把当前图片后移">后移 →</button>
+              <button type="button" class="ghost-button ghost-danger" id="removeItemBtn">移除这张</button>
+            </div>
             <p class="batch-hint" id="batchProgress"></p>
-            <p class="section-hint">水印位置、大小相同的照片，套用同一张遮罩后一次处理完，再打包下载。</p>
+            <p class="section-hint">水印位置、大小相同的照片，套用同一张遮罩后一次处理完，再打包下载。拖动缩略图可以调整顺序。</p>
           </section>
 
           <div class="privacy-note">
@@ -472,7 +477,7 @@
     </div>
     <div class="help-body">
       <ol class="help-steps">
-        <li><span>01</span><div><strong>上传画面</strong><p>拖入、选择或直接粘贴照片，可一次选多张。支持 JPG、PNG、WebP，单张最大 40MB；导入的图片都会进入底部队列，各自保留遮罩。</p></div></li>
+        <li><span>01</span><div><strong>上传画面</strong><p>拖入、选择或直接粘贴照片，可一次选多张。支持 JPG、PNG、WebP，单张最大 40MB；导入的图片都会进入底部队列，可以拖动缩略图排序、点缩略图上的 × 移除，各自保留遮罩。</p></div></li>
         <li><span>02</span><div><strong>涂抹水印</strong><p>用画笔覆盖水印；拖动笔刷尺寸时，画面上会显示同尺寸圆环。按住 <kbd>X</kbd> 可临时换成橡皮擦掉多涂的部分，松开回到画笔；两张笔刷的尺寸分别记忆。水印有投影时把遮罩扩展调到 8–12px。</p></div></li>
         <li><span>03</span><div><strong>重建画面</strong><p>点击“开始去水印”。LaMa 会在本机完成推理；在对比视图里拖动画面任意位置即可查看前后效果，然后下载 PNG。</p></div></li>
       </ol>
@@ -492,6 +497,7 @@
             <div><dt><kbd>Ctrl</kbd><kbd>↵</kbd></dt><dd>开始修复</dd></div>
             <div><dt><kbd>0</kbd> / <kbd>1</kbd></dt><dd>适应 / 100%</dd></div>
             <div><dt><kbd>Ctrl</kbd><kbd>←</kbd><kbd>→</kbd></dt><dd>切换队列里的图片</dd></div>
+            <div><dt><kbd>Alt</kbd><kbd>←</kbd><kbd>→</kbd></dt><dd>前移 / 后移当前图片</dd></div>
           </dl>
         </div>
         <div>
@@ -505,7 +511,7 @@
 
   <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 
-  <script src="/static/app.js?v=20261117f" defer></script>
+  <script src="/static/app.js?v=20261118c" defer></script>
 </body>
 </html>
 

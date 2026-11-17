@@ -884,8 +884,12 @@ body.is-busy .artboard-wrap { filter: blur(1px); }
   border: 1px solid var(--line);
   background: var(--panel-2);
   transition: 140ms ease;
+  cursor: grab;
 }
-.batch-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.78; }
+.batch-thumb:focus-visible { outline: 1px solid var(--lime-line); outline-offset: 1px; }
+.batch-thumb.is-dragging { opacity: 0.4; cursor: grabbing; }
+.batch-thumb.is-drop-target { border-color: var(--lime); box-shadow: inset 0 0 0 1px var(--lime-line); }
+.batch-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.78; pointer-events: none; }
 .batch-thumb:hover { border-color: var(--line-strong); }
 .batch-thumb:hover img { opacity: 1; }
 .batch-thumb.is-active { border-color: var(--lime); box-shadow: 0 0 0 1px var(--lime-line), 0 0 14px rgba(216, 255, 99, 0.16); }
@@ -905,11 +909,21 @@ body.is-busy .artboard-wrap { filter: blur(1px); }
   font-family: var(--font-mono); font-size: 7.5px;
 }
 .batch-thumb-done {
-  position: absolute; right: 3px; top: 3px;
+  position: absolute; left: 3px; bottom: 3px;
   width: 13px; height: 13px; border-radius: 50%;
   background: var(--lime); color: #11150a; font-size: 8px;
   display: grid; place-items: center;
 }
+.batch-thumb-remove {
+  position: absolute; right: 2px; top: 2px;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: rgba(6, 9, 7, 0.82); color: var(--text-soft);
+  font-size: 11px; line-height: 1; display: grid; place-items: center;
+  opacity: 0; transition: 120ms ease;
+}
+.batch-thumb:hover .batch-thumb-remove,
+.batch-thumb:focus-within .batch-thumb-remove { opacity: 1; }
+.batch-thumb-remove:hover { background: var(--coral); color: #1a0d0a; }
 .batch-add {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
   height: 42px; padding: 0 10px; border-radius: 7px;
@@ -944,6 +958,9 @@ select#maskSource:focus-visible { outline: 1px solid var(--lime-line); }
 .batch-check input { accent-color: var(--lime); width: 12px; height: 12px; }
 .batch-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .batch-actions .ghost-button { height: 34px; }
+.batch-order { display: grid; grid-template-columns: 1fr 1fr 1.1fr; gap: 6px; margin-top: 6px; }
+.ghost-danger { color: #ff8a76; border-color: rgba(255, 101, 76, 0.26); }
+.ghost-danger:hover:not(:disabled) { border-color: var(--coral); color: #ffb3a4; background: rgba(255, 101, 76, 0.08); }
 .batch-hint { margin: 9px 0 0; min-height: 12px; font-family: var(--font-mono); font-size: 8.5px; color: var(--lime); }
 .batch-hint:empty { display: none; }
 
@@ -953,4 +970,9 @@ select#maskSource:focus-visible { outline: 1px solid var(--lime-line); }
   .batch-list { order: 3; flex-basis: 100%; padding-bottom: 2px; }
   .batch-thumb { width: 56px; height: 38px; }
   .batch-add { height: 38px; margin-left: auto; }
+}
+
+/* Keep the remove affordance visible where hover does not exist. */
+@media (hover: none) {
+  .batch-thumb-remove { opacity: 0.9; }
 }

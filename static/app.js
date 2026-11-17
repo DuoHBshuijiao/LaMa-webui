@@ -70,6 +70,9 @@
     maskOnlyEmpty: $("#maskOnlyEmpty"),
     batchRunBtn: $("#batchRunBtn"),
     batchExportBtn: $("#batchExportBtn"),
+    movePrevBtn: $("#movePrevBtn"),
+    moveNextBtn: $("#moveNextBtn"),
+    removeItemBtn: $("#removeItemBtn"),
     dilate: $("#dilate"),
     dilateValue: $("#dilateValue"),
     feather: $("#feather"),
@@ -1147,56 +1150,206 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 8000);
   }
 
+  function moveItem(from, to) {
+    if (state.busy || state.batchRunning) return;
+    const count = state.items.length;
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+    if (from < 0 || to < 0 || from >= count || to >= count || from === to) return;
+    const active = state.items[state.index];
+    const [item] = state.items.splice(from, 1);
+    state.items.splice(to, 0, item);
+    state.index = state.items.indexOf(active);
+    renderBatchList();
+  }
+
+  function moveActive(offset) {
+    if (state.index < 0) return;
+    moveItem(state.index, state.index + offset);
+  }
+
+  function removeItem(index) {
+    if (state.busy || state.batchRunning) {
+      toast("正在处理中，稍后再移除。", "info", 2400);
+      return;
+    }
+    const item = state.items[index];
+    if (!item) return;
+    URL.revokeObjectURL(item.url);
+    if (item.result?.url) URL.revokeObjectURL(item.result.url);
+    const wasActive = index === state.index;
+    state.items.splice(index, 1);
+    if (!state.items.length) {
+      resetWorkspace();
+      toast("队列已清空，重新添加图片即可继续。", "info", 3200);
+      return;
+    }
+    if (wasActive) {
+      const next = Math.min(index, state.items.length - 1);
+      state.index = -1;
+      activate(next, { fit: true });
+    } else {
+      if (index < state.index) state.index -= 1;
+      renderBatchList();
+      refreshControls();
+    }
+  }
+
+  function resetWorkspace() {
+    state.index = -1;
+    state.image = null;
+    state.file = null;
+    state.fileName = "";
+    state.fileType = "";
+    state.originalUrl = null;
+    state.naturalW = 0;
+    state.naturalH = 0;
+    state.actions = [];
+    state.redo = [];
+    state.coverage = 0;
+    state.result = null;
+    state.resultMeta = null;
+    state.gesture = null;
+    state.zoom = 1;
+    state.panX = 0;
+    state.panY = 0;
+    el.baseImage.removeAttribute("src");
+    el.beforeImage.removeAttribute("src");
+    el.resultImage.removeAttribute("src");
+    el.artboardWrap.hidden = true;
+    el.canvasToolbar.hidden = true;
+    el.replaceBtn.hidden = true;
+    el.emptyState.hidden = false;
+    el.resultPanel.hidden = true;
+    el.runPanel.hidden = false;
+    el.topFileName.textContent = "未载入画面";
+    el.stageTitle.textContent = "等待画布";
+    el.stageFileMeta.textContent = "";
+    el.dimsLabel.textContent = "— × —";
+    el.maskLabel.textContent = "遮罩 0.0%";
+    el.maskState.textContent = "未标记";
+    document.title = "LAMA 清痕 · 单帧去水印工作台";
+    setMode("edit");
+    el.stageTip.hidden = true;
+    el.brushCursor.hidden = true;
+    hideBrushPreview();
+    maskCtx.clearRect(0, 0, el.maskCanvas.width, el.maskCanvas.height);
+    renderBatchList();
+    refreshControls();
+  }
+
   function renderBatchList() {
     const count = state.items.length;
     el.batchBar.hidden = count === 0;
     el.batchSection.hidden = count === 0;
     el.batchCount.textContent = `${count} 张`;
     el.batchList.replaceChildren();
+    let dragSource = null;
     state.items.forEach((item, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "batch-thumb";
-      if (index === state.index) button.classList.add("is-active");
-      if (item.result) button.classList.add("is-done");
-      button.title = `${index + 1}. ${item.fileName}`;
+      const thumb = document.createElement("div");
+      thumb.className = "batch-thumb";
+      thumb.draggable = true;
+      thumb.tabIndex = 0;
+      thumb.setAttribute("role", "button");
+      thumb.setAttribute("aria-label", `第 ${index + 1} 张：${item.fileName}`);
+      if (index === state.index) thumb.classList.add("is-active");
+      if (item.result) thumb.classList.add("is-done");
+      thumb.title = `${index + 1}. ${item.fileName}（拖动可排序）`;
+
       const image = document.createElement("img");
       image.src = item.url;
       image.alt = "";
       image.draggable = false;
+
       const badge = document.createElement("span");
       badge.className = "batch-thumb-index";
       badge.textContent = String(index + 1);
-      button.append(image, badge);
+      thumb.append(image, badge);
+
+      if (item.coverage > 0.03) {
+        const mask = document.createElement("span");
+        mask.className = "batch-thumb-mask";
+        mask.textContent = `${item.coverage.toFixed(0)}%`;
+        thumb.append(mask);
+      }
       if (item.result) {
         const done = document.createElement("span");
         done.className = "batch-thumb-done";
         done.textContent = "✓";
-        button.append(done);
-      } else if (item.coverage > 0.03) {
-        const mask = document.createElement("span");
-        mask.className = "batch-thumb-mask";
-        mask.textContent = `${item.coverage.toFixed(0)}%`;
-        button.append(mask);
+        thumb.append(done);
       }
-      button.addEventListener("click", () => {
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "batch-thumb-remove";
+      remove.setAttribute("aria-label", `移除第 ${index + 1} 张`);
+      remove.textContent = "×";
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        removeItem(index);
+      });
+      thumb.append(remove);
+
+      const open = () => {
         if (state.busy || state.batchRunning) {
           toast("正在处理中，等这张完成再切换。", "info", 2400);
           return;
         }
         activate(index);
+      };
+      thumb.addEventListener("click", open);
+      thumb.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          open();
+        }
       });
-      el.batchList.append(button);
+
+      thumb.addEventListener("dragstart", (event) => {
+        if (state.busy || state.batchRunning) {
+          event.preventDefault();
+          return;
+        }
+        dragSource = index;
+        thumb.classList.add("is-dragging");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(index));
+      });
+      thumb.addEventListener("dragend", () => {
+        dragSource = null;
+        thumb.classList.remove("is-dragging");
+        renderBatchList();
+      });
+      thumb.addEventListener("dragover", (event) => {
+        if (dragSource === null) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        thumb.classList.add("is-drop-target");
+      });
+      thumb.addEventListener("dragleave", () => thumb.classList.remove("is-drop-target"));
+      thumb.addEventListener("drop", (event) => {
+        event.preventDefault();
+        thumb.classList.remove("is-drop-target");
+        const from = Number(event.dataTransfer.getData("text/plain"));
+        if (Number.isInteger(from)) moveItem(from, index);
+      });
+
+      el.batchList.append(thumb);
     });
     renderMaskSources();
     const doneCount = state.items.filter((item) => item.result).length;
     el.batchState.textContent = `${doneCount} / ${count} 已完成`;
+    el.removeItemBtn.disabled = count === 0 || state.index < 0;
+    el.movePrevBtn.disabled = state.index <= 0;
+    el.moveNextBtn.disabled = state.index < 0 || state.index >= count - 1;
   }
 
   function renderMaskSources() {
     if (!el.maskSource) return;
-    const previous = Number(el.maskSource.value) || 0;
-    if (el.maskSource.options.length !== state.items.length) {
+    const selectedName = el.maskSource.dataset.selectedName || "";
+    const signature = state.items
+      .map((item) => `${item.fileName}:${item.naturalW}x${item.naturalH}`)
+      .join("\u0001");
+    if (el.maskSource.dataset.signature !== signature) {
       el.maskSource.replaceChildren();
       state.items.forEach((item, index) => {
         const option = document.createElement("option");
@@ -1204,10 +1357,16 @@
         option.textContent = `${index + 1}. ${baseName(item.fileName).slice(0, 16)}`;
         el.maskSource.append(option);
       });
+      el.maskSource.dataset.signature = signature;
     }
-    if (!state.items.length) return;
-    const pick = state.items[previous] ? previous : Math.max(0, Math.min(state.index, state.items.length - 1));
+    if (!state.items.length) {
+      delete el.maskSource.dataset.selectedName;
+      return;
+    }
+    let pick = state.items.findIndex((item) => item.fileName === selectedName);
+    if (pick < 0) pick = Math.max(0, Math.min(state.index, state.items.length - 1));
     el.maskSource.value = String(pick);
+    el.maskSource.dataset.selectedName = state.items[pick].fileName;
   }
 
   function cloneActionsFor(source, target) {
@@ -1689,6 +1848,15 @@
     el.applyMaskBtn.addEventListener("click", applyMaskToAll);
     el.batchRunBtn.addEventListener("click", runBatch);
     el.batchExportBtn.addEventListener("click", exportBatchZip);
+    el.movePrevBtn.addEventListener("click", () => moveActive(-1));
+    el.moveNextBtn.addEventListener("click", () => moveActive(1));
+    el.removeItemBtn.addEventListener("click", () => {
+      if (state.index >= 0) removeItem(state.index);
+    });
+    el.maskSource.addEventListener("change", () => {
+      const item = state.items[Number(el.maskSource.value)];
+      if (item) el.maskSource.dataset.selectedName = item.fileName;
+    });
     el.loadDemo.addEventListener("click", loadDemoImage);
 
     el.demoPhoto.addEventListener("pointerdown", beginDemoDrag);
@@ -1934,6 +2102,11 @@
       if (event.key === "1") {
         event.preventDefault();
         actualPixels();
+        return;
+      }
+      if (event.altKey && (key === "arrowleft" || key === "arrowright")) {
+        event.preventDefault();
+        moveActive(key === "arrowleft" ? -1 : 1);
         return;
       }
       if ((event.ctrlKey || event.metaKey) && (key === "arrowleft" || key === "arrowright")) {
