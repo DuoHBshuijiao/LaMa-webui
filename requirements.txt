@@ -1,0 +1,9 @@
+# Runtime dependencies for LAMA 清痕.
+# On Windows the PyPI torch wheel is CPU-only.  See README.md for CUDA.
+fastapi==0.163.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.33
+pillow==13.0.0
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+torch==2.7.1

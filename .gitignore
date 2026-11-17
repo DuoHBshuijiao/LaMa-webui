@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.cache/
+outputs/*
+!outputs/.gitkeep
+models/*.pt
+models/*.zip
+models/*.onnx
+logs/
+samples/api-result*.png
+samples/demo-raw-result.jpg
