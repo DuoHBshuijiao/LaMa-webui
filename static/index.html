@@ -7,7 +7,7 @@
   <meta name="description" content="LaMa 单帧去水印工作台：在本机涂抹水印区域，用大遮罩修复模型重建画面纹理。">
   <title>LAMA 清痕 · 单帧去水印工作台</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20261116j">
+  <link rel="stylesheet" href="/static/styles.css?v=20261117e">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -122,7 +122,7 @@
               <svg><use href="#i-brush"/></svg>调整遮罩
             </button>
             <button class="stage-link stage-link-strong" id="replaceBtn" type="button" hidden>
-              替换图片
+              添加图片
             </button>
           </div>
         </div>
@@ -140,12 +140,12 @@
               <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="选择或拖入图片">
                 <span class="dropzone-icon"><svg><use href="#i-upload"/></svg></span>
                 <span class="dropzone-text">
-                  <strong>拖入照片，或点击选择</strong>
+                  <strong>拖入照片，或点击选择（可多选）</strong>
                   <span>JPG · PNG · WEBP / 最大 40MB</span>
                 </span>
                 <span class="dropzone-arrow"><svg><use href="#i-chevron"/></svg></span>
               </div>
-              <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,image/bmp" hidden>
+              <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,image/bmp" multiple hidden>
 
               <div class="sample-line">
                 <span>没有素材？</span>
@@ -279,6 +279,18 @@
           </div>
         </div>
 
+        <div class="batch-strip" id="batchBar" hidden>
+          <div class="batch-strip-head">
+            <span class="batch-strip-title">批量队列</span>
+            <span class="batch-strip-count" id="batchCount">0 张</span>
+          </div>
+          <div class="batch-list" id="batchList" role="list" aria-label="已导入的图片"></div>
+          <button class="batch-add" id="batchAddBtn" type="button" aria-label="添加更多图片">
+            <svg><use href="#i-upload"/></svg>添加
+          </button>
+          <input type="file" id="batchInput" accept="image/png,image/jpeg,image/webp,image/bmp" multiple hidden>
+        </div>
+
         <footer class="stage-footer">
           <div class="footer-fact" id="dimsLabel">— × —</div>
           <span class="footer-rule" aria-hidden="true"></span>
@@ -378,6 +390,31 @@
             </div>
           </section>
 
+          <section class="panel-section" id="batchSection" hidden>
+            <div class="section-heading">
+              <span class="section-index">04</span>
+              <h3>批量处理</h3>
+              <span class="section-state" id="batchState">0 / 0 已完成</span>
+            </div>
+
+            <div class="batch-apply">
+              <label class="batch-field" for="maskSource">复用遮罩</label>
+              <select id="maskSource" aria-label="选择遮罩来源"></select>
+              <button type="button" class="ghost-button" id="applyMaskBtn">套用到全部</button>
+            </div>
+            <label class="batch-check">
+              <input type="checkbox" id="maskOnlyEmpty" checked>
+              <span>只套用到还没有遮罩的图片</span>
+            </label>
+
+            <div class="batch-actions">
+              <button type="button" class="ghost-button" id="batchRunBtn">批量去水印</button>
+              <button type="button" class="ghost-button" id="batchExportBtn">导出全部 ZIP</button>
+            </div>
+            <p class="batch-hint" id="batchProgress"></p>
+            <p class="section-hint">水印位置、大小相同的照片，套用同一张遮罩后一次处理完，再打包下载。</p>
+          </section>
+
           <div class="privacy-note">
             <svg><use href="#i-lock"/></svg>
             <p><strong>完全本地处理</strong><span>照片不会离开这台电脑，也不会被写入云端。</span></p>
@@ -435,7 +472,7 @@
     </div>
     <div class="help-body">
       <ol class="help-steps">
-        <li><span>01</span><div><strong>上传画面</strong><p>拖入、选择或直接粘贴一张照片。支持 JPG、PNG、WebP，最大 40MB。</p></div></li>
+        <li><span>01</span><div><strong>上传画面</strong><p>拖入、选择或直接粘贴照片，可一次选多张。支持 JPG、PNG、WebP，单张最大 40MB；导入的图片都会进入底部队列，各自保留遮罩。</p></div></li>
         <li><span>02</span><div><strong>涂抹水印</strong><p>用画笔覆盖水印；拖动笔刷尺寸时，画面上会显示同尺寸圆环。按住 <kbd>X</kbd> 可临时换成橡皮擦掉多涂的部分，松开回到画笔；两张笔刷的尺寸分别记忆。水印有投影时把遮罩扩展调到 8–12px。</p></div></li>
         <li><span>03</span><div><strong>重建画面</strong><p>点击“开始去水印”。LaMa 会在本机完成推理；在对比视图里拖动画面任意位置即可查看前后效果，然后下载 PNG。</p></div></li>
       </ol>
@@ -454,6 +491,7 @@
             <div><dt><kbd>Ctrl</kbd><kbd>滚轮</kbd></dt><dd>缩放</dd></div>
             <div><dt><kbd>Ctrl</kbd><kbd>↵</kbd></dt><dd>开始修复</dd></div>
             <div><dt><kbd>0</kbd> / <kbd>1</kbd></dt><dd>适应 / 100%</dd></div>
+            <div><dt><kbd>Ctrl</kbd><kbd>←</kbd><kbd>→</kbd></dt><dd>切换队列里的图片</dd></div>
           </dl>
         </div>
         <div>
@@ -467,7 +505,7 @@
 
   <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 
-  <script src="/static/app.js?v=20261117b" defer></script>
+  <script src="/static/app.js?v=20261117f" defer></script>
 </body>
 </html>
 

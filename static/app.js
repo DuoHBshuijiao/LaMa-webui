@@ -57,6 +57,19 @@
     brushSize: $("#brushSize"),
     brushValue: $("#brushValue"),
     brushLabel: $("#brushLabel"),
+    batchBar: $("#batchBar"),
+    batchList: $("#batchList"),
+    batchCount: $("#batchCount"),
+    batchAddBtn: $("#batchAddBtn"),
+    batchInput: $("#batchInput"),
+    batchSection: $("#batchSection"),
+    batchState: $("#batchState"),
+    batchProgress: $("#batchProgress"),
+    maskSource: $("#maskSource"),
+    applyMaskBtn: $("#applyMaskBtn"),
+    maskOnlyEmpty: $("#maskOnlyEmpty"),
+    batchRunBtn: $("#batchRunBtn"),
+    batchExportBtn: $("#batchExportBtn"),
     dilate: $("#dilate"),
     dilateValue: $("#dilateValue"),
     feather: $("#feather"),
@@ -85,7 +98,11 @@
   };
 
   const maskCtx = el.maskCanvas.getContext("2d", { willReadFrequently: true });
+  let itemSeq = 0;
   const state = {
+    items: [],
+    index: -1,
+    batchRunning: false,
     image: null,
     file: null,
     fileName: "",
@@ -260,95 +277,156 @@
   }
 
   // ------------------------------------------------------------ image setup
-  async function loadFile(file, options = {}) {
-    if (state.busy) return;
-    if (!file || !isImageFile(file)) {
-      toast("请选择 JPG、PNG 或 WEBP 图片。", "error");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      toast("图片超过 40MB，请先压缩后再试。", "error");
-      return;
-    }
+  function validateFile(file) {
+    if (!file || !isImageFile(file)) return "请选择 JPG、PNG 或 WEBP 图片。";
+    if (file.size > MAX_BYTES) return "图片超过 40MB，请先压缩后再试。";
     if (/heic|heif/i.test(file.type) || /\.(heic|heif)$/i.test(file.name || "")) {
-      toast("浏览器无法直接读取 HEIC，请先导出为 JPG 或 PNG。", "error", 5200);
-      return;
+      return "浏览器无法直接读取 HEIC，请先导出为 JPG 或 PNG。";
     }
+    return "";
+  }
 
-    let url = "";
-    try {
-      url = URL.createObjectURL(file);
-      const image = await loadImage(url);
-      if (image.naturalWidth < 16 || image.naturalHeight < 16) throw new Error("图片尺寸太小");
-      if (image.naturalWidth * image.naturalHeight > MAX_PIXELS) throw new Error("图片超过 6000 万像素");
+  function createItem(file, image, url) {
+    return {
+      id: `item-${++itemSeq}`,
+      file,
+      image,
+      url,
+      fileName: file.name || "lama-image",
+      naturalW: image.naturalWidth,
+      naturalH: image.naturalHeight,
+      actions: [],
+      redo: [],
+      coverage: 0,
+      result: null,
+      resultMeta: null,
+    };
+  }
 
-      invalidateResult({ silent: true });
-      if (state.originalUrl) URL.revokeObjectURL(state.originalUrl);
+  function activeItem() {
+    return state.items[state.index] || null;
+  }
 
-      state.image = image;
-      state.file = file;
-      state.fileName = file.name || "lama-image";
-      state.fileType = file.type || "image/jpeg";
-      state.originalUrl = url;
-      state.naturalW = image.naturalWidth;
-      state.naturalH = image.naturalHeight;
-      state.actions = [];
-      state.redo = [];
-      state.coverage = 0;
-      state.lastImagePoint = null;
+  async function addFiles(fileList, options = {}) {
+    if (state.busy || state.batchRunning) {
+      toast("正在处理图片，稍后再添加。", "info");
+      return [];
+    }
+    const files = Array.from(fileList || []);
+    if (!files.length) return [];
+    const added = [];
+    let problem = "";
+    for (const file of files) {
+      const invalid = validateFile(file);
+      if (invalid) {
+        problem = problem || invalid;
+        continue;
+      }
+      let url = "";
+      try {
+        url = URL.createObjectURL(file);
+        const image = await loadImage(url);
+        if (image.naturalWidth < 16 || image.naturalHeight < 16) throw new Error("small");
+        if (image.naturalWidth * image.naturalHeight > MAX_PIXELS) throw new Error("huge");
+        added.push(createItem(file, image, url));
+      } catch (error) {
+        if (url) URL.revokeObjectURL(url);
+        if (error.message === "small") problem = problem || "有图片太小，至少需要 16 × 16 像素。";
+        else if (error.message === "huge") problem = problem || "有图片超过 6000 万像素，请先缩小。";
+        else problem = problem || "有图片无法读取，请换一张 JPG 或 PNG。";
+      }
+    }
+    if (!added.length) {
+      toast(problem || "这些图片无法读取。", "error", 5200);
+      return [];
+    }
+    const firstIndex = state.items.length;
+    state.items.push(...added);
+    activate(firstIndex);
+    renderBatchList();
+    if (options.quiet) return added;
+    if (added.length > 1) {
+      toast(`已加入 ${added.length} 张图片：逐张涂抹，或用「套用遮罩」批量处理。`, "info", 4800);
+    } else if (problem) {
+      toast(`已加入 1 张图片；另一张被跳过：${problem}`, "info", 5200);
+    } else if (!state.result) {
+      toast("图片已载入，涂抹水印区域后开始修复。", "info");
+    }
+    return added;
+  }
+
+  function activate(index, options = {}) {
+    const item = state.items[index];
+    if (!item) return;
+    const sameItem = index === state.index;
+    state.index = index;
+    state.image = item.image;
+    state.file = item.file;
+    state.fileName = item.fileName;
+    state.fileType = item.file.type || "image/jpeg";
+    state.originalUrl = item.url;
+    state.naturalW = item.naturalW;
+    state.naturalH = item.naturalH;
+    state.actions = item.actions;
+    state.redo = item.redo;
+    state.coverage = item.coverage;
+    state.result = item.result;
+    state.resultMeta = item.resultMeta;
+    if (!sameItem) {
       state.zoom = 1;
       state.panX = 0;
       state.panY = 0;
-      hideBrushPreview();
-      el.maskLabel.textContent = "遮罩 0.0%";
-      el.maskState.textContent = "未标记";
+    }
 
-      el.baseImage.src = url;
-      el.beforeImage.src = url;
-      el.baseImage.alt = state.fileName;
-      await Promise.allSettled([el.baseImage.decode?.(), el.beforeImage.decode?.()]);
-
-      el.maskCanvas.width = state.naturalW;
-      el.maskCanvas.height = state.naturalH;
-      maskCtx.clearRect(0, 0, state.naturalW, state.naturalH);
-
-      el.emptyState.hidden = true;
-      el.artboardWrap.hidden = false;
-      el.canvasToolbar.hidden = false;
-      el.replaceBtn.hidden = false;
-      el.topFileName.textContent = state.fileName;
-      el.stageTitle.textContent = baseName(state.fileName);
-      el.stageFileMeta.textContent = `${state.naturalW} × ${state.naturalH}`;
-      el.dimsLabel.textContent = `${state.naturalW} × ${state.naturalH} px`;
-      document.title = `${baseName(state.fileName)} · LAMA 清痕`;
-
+    el.baseImage.src = item.url;
+    el.beforeImage.src = item.url;
+    el.baseImage.alt = item.fileName;
+    el.maskCanvas.width = item.naturalW;
+    el.maskCanvas.height = item.naturalH;
+    redrawMask();
+    el.maskLabel.textContent = `遮罩 ${item.coverage.toFixed(1)}%`;
+    el.maskState.textContent = item.coverage < 0.03
+      ? "未标记"
+      : item.coverage > 75
+        ? `覆盖 ${item.coverage.toFixed(0)}%`
+        : `已标记 ${item.coverage.toFixed(1)}%`;
+    el.emptyState.hidden = true;
+    el.artboardWrap.hidden = false;
+    el.canvasToolbar.hidden = false;
+    el.replaceBtn.hidden = false;
+    el.topFileName.textContent = item.fileName;
+    el.stageTitle.textContent = baseName(item.fileName);
+    el.stageFileMeta.textContent = `${item.naturalW} × ${item.naturalH}`;
+    el.dimsLabel.textContent = `${item.naturalW} × ${item.naturalH} px`;
+    document.title = `${baseName(item.fileName)} · LAMA 清痕`;
+    hideBrushPreview();
+    if (item.result) {
+      showResultView(item.result, item.resultMeta, item.fileName);
+      setMode("compare");
+    } else {
+      el.resultImage.removeAttribute("src");
+      el.resultPanel.hidden = true;
+      el.runPanel.hidden = false;
       setMode("edit");
-      if (options.maskBlob) {
-        try {
-          await addMaskRaster(options.maskBlob);
-        } catch {
-          toast("示例遮罩载入失败，请手动涂抹。", "error");
-        }
-      }
-      updateCoverage();
-      refreshControls();
-      updateEstimate();
+    }
+    updateCoverage();
+    refreshControls();
+    renderBatchList();
+    if (!sameItem && options.fit !== false) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => fitArtboard(true));
       });
-      if (options.demo) {
-        toast("示例已载入，遮罩也准备好了。可以直接开始去水印。", "info", 4600);
-      } else {
-        toast("图片已载入，涂抹水印区域后开始修复。", "info");
-      }
-    } catch (error) {
-      if (url && url !== state.originalUrl) URL.revokeObjectURL(url);
-      toast(error.message === "图片尺寸太小"
-        ? "图片太小，至少需要 16 × 16 像素。"
-        : error.message === "图片超过 6000 万像素"
-          ? "图片超过 6000 万像素，请先缩小后再试。"
-          : "这张图片无法读取，请换一张 JPG 或 PNG。", "error", 5000);
     }
+  }
+
+  function showResultView(result, meta, fileName) {
+    el.resultImage.src = result.url;
+    el.resultImage.alt = `${baseName(fileName)} 修复结果`;
+    el.resultPanel.hidden = false;
+    el.runPanel.hidden = true;
+    el.resultMeta.textContent = `${meta.width} × ${meta.height} · ${(meta.totalMs / 1000).toFixed(1)}s`;
+    el.resultDevice.textContent = meta.device === "cuda" ? "CUDA" : "CPU";
+    el.replaceBtn.hidden = false;
   }
 
   function resetMaskCanvas() {
@@ -381,8 +459,17 @@
         data[i + 3] = alpha;
       }
       ctx.putImageData(pixels, 0, 0);
-      state.actions = [{ type: "raster", canvas, locked: true }];
-      state.redo = [];
+      const item = activeItem();
+      const raster = { type: "raster", canvas, locked: true };
+      if (item) {
+        item.actions = [raster];
+        item.redo = [];
+        state.actions = item.actions;
+        state.redo = item.redo;
+      } else {
+        state.actions = [raster];
+        state.redo = [];
+      }
       redrawMask();
       updateCoverage();
       refreshControls();
@@ -491,15 +578,18 @@
     ctx.restore();
   }
 
-  function renderActions(ctx, color = "#ff654c") {
-    ctx.clearRect(0, 0, state.naturalW, state.naturalH);
-    for (const action of state.actions) {
+  function renderActions(ctx, color = "#ff654c", item = activeItem()) {
+    if (!item) return;
+    const width = item.naturalW;
+    const height = item.naturalH;
+    ctx.clearRect(0, 0, width, height);
+    for (const action of item.actions) {
       if (action.type === "clear") {
-        ctx.clearRect(0, 0, state.naturalW, state.naturalH);
+        ctx.clearRect(0, 0, width, height);
       } else if (action.type === "raster") {
         ctx.save();
         ctx.globalCompositeOperation = "source-over";
-        ctx.drawImage(action.canvas, 0, 0, state.naturalW, state.naturalH);
+        ctx.drawImage(action.canvas, 0, 0, width, height);
         ctx.restore();
       } else if (action.type === "stroke") {
         strokePath(ctx, action, color);
@@ -538,30 +628,39 @@
   function updateCoverage() {
     window.clearTimeout(state.coverageTimer);
     state.coverageTimer = window.setTimeout(() => {
-      if (!state.image) return;
-      const sampleW = Math.max(32, Math.min(320, state.naturalW));
-      const sampleH = Math.max(20, Math.round(sampleW * state.naturalH / Math.max(1, state.naturalW)));
-      const sample = document.createElement("canvas");
-      sample.width = sampleW;
-      sample.height = sampleH;
-      const ctx = sample.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(el.maskCanvas, 0, 0, sampleW, sampleH);
-      const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
-      let marked = 0;
-      for (let i = 3; i < data.length; i += 4) {
-        if (data[i] > 8) marked += 1;
-      }
-      state.coverage = (marked / (sampleW * sampleH)) * 100;
-      el.maskLabel.textContent = `遮罩 ${state.coverage.toFixed(1)}%`;
-      if (state.coverage < 0.03) {
+      const item = activeItem();
+      if (!item) return;
+      item.coverage = measureCoverage(item);
+      state.coverage = item.coverage;
+      el.maskLabel.textContent = `遮罩 ${item.coverage.toFixed(1)}%`;
+      if (item.coverage < 0.03) {
         el.maskState.textContent = "未标记";
-      } else if (state.coverage > 75) {
-        el.maskState.textContent = `覆盖 ${state.coverage.toFixed(0)}%`;
+      } else if (item.coverage > 75) {
+        el.maskState.textContent = `覆盖 ${item.coverage.toFixed(0)}%`;
       } else {
-        el.maskState.textContent = `已标记 ${state.coverage.toFixed(1)}%`;
+        el.maskState.textContent = `已标记 ${item.coverage.toFixed(1)}%`;
       }
       refreshControls();
+      renderBatchList();
     }, 90);
+  }
+
+  function measureCoverage(item) {
+    if (!item) return 0;
+    const sampleW = Math.max(32, Math.min(320, item.naturalW));
+    const sampleH = Math.max(20, Math.round((sampleW * item.naturalH) / Math.max(1, item.naturalW)));
+    const sample = document.createElement("canvas");
+    sample.width = sampleW;
+    sample.height = sampleH;
+    const ctx = sample.getContext("2d", { willReadFrequently: true });
+    ctx.scale(sampleW / item.naturalW, sampleH / item.naturalH);
+    renderActions(ctx, "#ff654c", item);
+    const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+    let marked = 0;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] > 8) marked += 1;
+    }
+    return (marked / (sampleW * sampleH)) * 100;
   }
 
   function canUndo() {
@@ -595,7 +694,7 @@
     if (!state.image || state.busy || state.coverage < 0.03) return;
     invalidateResult({ silent: true });
     state.actions.push({ type: "clear" });
-    state.redo = [];
+    state.redo.length = 0;
     redrawMask();
     state.coverage = 0;
     el.maskLabel.textContent = "遮罩 0.0%";
@@ -605,12 +704,12 @@
     toast("遮罩已清空，可用 Ctrl+Z 撤销。", "info", 2600);
   }
 
-  async function exportMaskBlob() {
+  async function exportMaskBlob(item = activeItem()) {
     const canvas = document.createElement("canvas");
-    canvas.width = state.naturalW;
-    canvas.height = state.naturalH;
+    canvas.width = item.naturalW;
+    canvas.height = item.naturalH;
     const ctx = canvas.getContext("2d");
-    renderActions(ctx, "#ffffff");
+    renderActions(ctx, "#ffffff", item);
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
         if (blob) resolve(blob);
@@ -661,7 +760,7 @@
       points: [point],
     };
     state.actions.push(stroke);
-    state.redo = [];
+    state.redo.length = 0;
     drawDot(point, stroke.size, eraser);
     state.gesture = {
       type: "draw",
@@ -920,46 +1019,344 @@
   }
 
   function setResult(blob, url, meta) {
-    if (state.result?.url) URL.revokeObjectURL(state.result.url);
-    state.result = { blob, url, meta };
+    const item = activeItem();
+    const previous = state.result || item?.result;
+    if (previous?.url && previous.url !== url) URL.revokeObjectURL(previous.url);
+    const result = { blob, url, meta };
+    state.result = result;
     state.resultMeta = meta;
-    el.resultImage.src = url;
-    el.resultImage.alt = `${baseName(state.fileName)} 修复结果`;
-    el.resultPanel.hidden = false;
-    el.runPanel.hidden = true;
-    el.resultMeta.textContent = `${meta.width} × ${meta.height} · ${(meta.totalMs / 1000).toFixed(1)}s`;
-    el.resultDevice.textContent = meta.device === "cuda" ? "CUDA" : "CPU";
-    el.replaceBtn.hidden = false;
+    if (item) {
+      item.result = result;
+      item.resultMeta = meta;
+    }
+    showResultView(result, meta, state.fileName);
     setMode("compare");
     applyCompare();
+    renderBatchList();
   }
 
   function invalidateResult(options = {}) {
-    if (!state.result) {
+    const item = activeItem();
+    const current = state.result || item?.result;
+    if (!current) {
       if (!options.silent) refreshControls();
       return;
     }
-    if (state.result.url) {
-      el.resultImage.removeAttribute("src");
-      URL.revokeObjectURL(state.result.url);
-    }
+    if (current.url) URL.revokeObjectURL(current.url);
     state.result = null;
     state.resultMeta = null;
-    el.resultLayer.hidden = true;
-    el.beforeLayer.hidden = true;
-    el.compareLine.hidden = true;
-    el.compareTags.hidden = true;
-    el.compareHint.hidden = true;
+    if (item) {
+      item.result = null;
+      item.resultMeta = null;
+    }
+    el.resultImage.removeAttribute("src");
     el.resultPanel.hidden = true;
     el.runPanel.hidden = false;
-    el.viewSwitch.hidden = true;
-    el.editMaskBtn.hidden = true;
-    el.backToResultBtn.hidden = true;
-    state.mode = "edit";
-    el.artboard.classList.remove("is-compare");
-    el.maskCanvas.hidden = false;
-    el.stageTip.hidden = false;
-    refreshControls();
+    setMode("edit");
+    renderBatchList();
+    if (!options.silent) refreshControls();
+  }
+
+  // ---------------------------------------------------------------- batch
+  const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) {
+      let c = n;
+      for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(bytes) {
+    let crc = 0xffffffff;
+    for (let i = 0; i < bytes.length; i += 1) {
+      crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function zipStore(entries) {
+    const encoder = new TextEncoder();
+    const parts = [];
+    const central = [];
+    let offset = 0;
+    for (const entry of entries) {
+      const name = encoder.encode(entry.name);
+      const crc = crc32(entry.bytes);
+      const size = entry.bytes.length;
+      const local = new Uint8Array(30 + name.length);
+      const lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0x0800, true);
+      lv.setUint16(8, 0, true);
+      lv.setUint16(10, 0, true);
+      lv.setUint16(12, 0x21, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, size, true);
+      lv.setUint32(22, size, true);
+      lv.setUint16(26, name.length, true);
+      lv.setUint16(28, 0, true);
+      local.set(name, 30);
+      parts.push(local, entry.bytes);
+
+      const cen = new Uint8Array(46 + name.length);
+      const cv = new DataView(cen.buffer);
+      cv.setUint32(0, 0x02014b50, true);
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0x0800, true);
+      cv.setUint16(10, 0, true);
+      cv.setUint16(12, 0, true);
+      cv.setUint16(14, 0x21, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, size, true);
+      cv.setUint32(24, size, true);
+      cv.setUint16(28, name.length, true);
+      cv.setUint32(42, offset, true);
+      cen.set(name, 46);
+      central.push(cen);
+      offset += local.length + entry.bytes.length;
+    }
+    const centralSize = central.reduce((sum, part) => sum + part.length, 0);
+    const end = new Uint8Array(22);
+    const ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(8, entries.length, true);
+    ev.setUint16(10, entries.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end], { type: "application/zip" });
+  }
+
+  function dateStamp() {
+    const now = new Date();
+    const pad = (value) => String(value).padStart(2, "0");
+    return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  }
+
+  function downloadBlob(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 8000);
+  }
+
+  function renderBatchList() {
+    const count = state.items.length;
+    el.batchBar.hidden = count === 0;
+    el.batchSection.hidden = count === 0;
+    el.batchCount.textContent = `${count} 张`;
+    el.batchList.replaceChildren();
+    state.items.forEach((item, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "batch-thumb";
+      if (index === state.index) button.classList.add("is-active");
+      if (item.result) button.classList.add("is-done");
+      button.title = `${index + 1}. ${item.fileName}`;
+      const image = document.createElement("img");
+      image.src = item.url;
+      image.alt = "";
+      image.draggable = false;
+      const badge = document.createElement("span");
+      badge.className = "batch-thumb-index";
+      badge.textContent = String(index + 1);
+      button.append(image, badge);
+      if (item.result) {
+        const done = document.createElement("span");
+        done.className = "batch-thumb-done";
+        done.textContent = "✓";
+        button.append(done);
+      } else if (item.coverage > 0.03) {
+        const mask = document.createElement("span");
+        mask.className = "batch-thumb-mask";
+        mask.textContent = `${item.coverage.toFixed(0)}%`;
+        button.append(mask);
+      }
+      button.addEventListener("click", () => {
+        if (state.busy || state.batchRunning) {
+          toast("正在处理中，等这张完成再切换。", "info", 2400);
+          return;
+        }
+        activate(index);
+      });
+      el.batchList.append(button);
+    });
+    renderMaskSources();
+    const doneCount = state.items.filter((item) => item.result).length;
+    el.batchState.textContent = `${doneCount} / ${count} 已完成`;
+  }
+
+  function renderMaskSources() {
+    if (!el.maskSource) return;
+    const previous = Number(el.maskSource.value) || 0;
+    if (el.maskSource.options.length !== state.items.length) {
+      el.maskSource.replaceChildren();
+      state.items.forEach((item, index) => {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = `${index + 1}. ${baseName(item.fileName).slice(0, 16)}`;
+        el.maskSource.append(option);
+      });
+    }
+    if (!state.items.length) return;
+    const pick = state.items[previous] ? previous : Math.max(0, Math.min(state.index, state.items.length - 1));
+    el.maskSource.value = String(pick);
+  }
+
+  function cloneActionsFor(source, target) {
+    const scaleX = target.naturalW / Math.max(1, source.naturalW);
+    const scaleY = target.naturalH / Math.max(1, source.naturalH);
+    const strokeScale = Math.min(scaleX, scaleY);
+    return source.actions.map((action) => {
+      if (action.type === "stroke") {
+        return {
+          type: "stroke",
+          mode: action.mode,
+          size: Math.max(1, action.size * strokeScale),
+          points: action.points.map((point) => ({ x: point.x * scaleX, y: point.y * scaleY })),
+        };
+      }
+      if (action.type === "raster") {
+        const canvas = document.createElement("canvas");
+        canvas.width = target.naturalW;
+        canvas.height = target.naturalH;
+        canvas.getContext("2d").drawImage(action.canvas, 0, 0, target.naturalW, target.naturalH);
+        return { type: "raster", canvas, locked: Boolean(action.locked) };
+      }
+      return { ...action };
+    });
+  }
+
+  function dropItemResult(item) {
+    if (!item?.result) return;
+    if (item.result.url) URL.revokeObjectURL(item.result.url);
+    item.result = null;
+    item.resultMeta = null;
+    if (state.items[state.index] === item) {
+      state.result = null;
+      state.resultMeta = null;
+    }
+  }
+
+  function applyMaskToAll() {
+    if (state.busy || state.batchRunning) return;
+    const sourceIndex = Number(el.maskSource.value);
+    const source = state.items[sourceIndex];
+    if (!source) {
+      toast("先选择要复用哪张图片的遮罩。", "info");
+      return;
+    }
+    if (!source.actions.length) {
+      toast("这张图片还没有遮罩，先涂抹或载入示例遮罩。", "info", 3800);
+      return;
+    }
+    const onlyEmpty = el.maskOnlyEmpty.checked;
+    let applied = 0;
+    state.items.forEach((item, index) => {
+      if (index === sourceIndex) return;
+      if (onlyEmpty && item.coverage > 0.03) return;
+      dropItemResult(item);
+      item.actions = cloneActionsFor(source, item);
+      item.redo = [];
+      item.coverage = measureCoverage(item);
+      applied += 1;
+    });
+    if (applied) {
+      const current = state.items[state.index];
+      if (current) {
+        state.actions = current.actions;
+        state.redo = current.redo;
+        state.coverage = current.coverage;
+      }
+      activate(state.index, { fit: false });
+      updateCoverage();
+    } else {
+      renderBatchList();
+      refreshControls();
+    }
+    toast(
+      applied
+        ? `已把第 ${sourceIndex + 1} 张的遮罩套用到 ${applied} 张图片。`
+        : "没有需要套用的图片（其余图片都已有遮罩）。",
+      applied ? "success" : "info",
+      3800,
+    );
+  }
+
+  async function runBatch() {
+    if (state.busy || state.batchRunning) return;
+    if (!state.ready) {
+      toast("模型尚未就绪，请稍候。", "error");
+      return;
+    }
+    const targets = state.items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.coverage > 0.03 && !item.result);
+    if (!targets.length) {
+      toast("没有待处理的图片：先涂抹遮罩，或用「套用到全部」。", "info", 4200);
+      return;
+    }
+    state.batchRunning = true;
+    el.batchRunBtn.disabled = true;
+    el.batchExportBtn.disabled = true;
+    el.batchAddBtn.disabled = true;
+    document.body.classList.add("is-batch");
+    let finished = 0;
+    try {
+      for (let n = 0; n < targets.length; n += 1) {
+        const target = targets[n];
+        el.batchProgress.textContent = `处理中 ${n + 1} / ${targets.length} · ${target.item.fileName}`;
+        activate(target.index, { fit: false });
+        // eslint-disable-next-line no-await-in-loop
+        const ok = await runInpaint({ batch: true });
+        if (ok) finished += 1;
+      }
+    } finally {
+      state.batchRunning = false;
+      el.batchRunBtn.disabled = false;
+      el.batchExportBtn.disabled = false;
+      el.batchAddBtn.disabled = false;
+      el.batchProgress.textContent = "";
+      document.body.classList.remove("is-batch");
+      renderBatchList();
+      refreshControls();
+    }
+    toast(`批量处理完成：${finished} / ${targets.length} 张成功。`, finished ? "success" : "error", 4600);
+  }
+
+  async function exportBatchZip() {
+    if (state.batchRunning) return;
+    const done = state.items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.result);
+    if (!done.length) {
+      toast("还没有处理结果：先批量去水印。", "info", 3600);
+      return;
+    }
+    el.batchExportBtn.disabled = true;
+    try {
+      const files = [];
+      for (const { item, index } of done) {
+        const bytes = new Uint8Array(await item.result.blob.arrayBuffer());
+        files.push({
+          name: `${String(index + 1).padStart(3, "0")}-${baseName(item.fileName)}.png`,
+          bytes,
+        });
+      }
+      downloadBlob(zipStore(files), `lama-batch-${dateStamp()}.zip`);
+      toast(`已打包 ${files.length} 张结果。`, "success", 3800);
+    } catch {
+      toast("打包失败，请重试。", "error", 4200);
+    } finally {
+      el.batchExportBtn.disabled = false;
+    }
   }
 
   // ------------------------------------------------------------------ run
@@ -1023,15 +1420,15 @@
     return state.health?.device === "cuda" ? "CUDA" : "CPU";
   }
 
-  async function runInpaint() {
-    if (!state.image || !state.file || state.busy) return;
+  async function runInpaint(options = {}) {
+    if (!state.image || !state.file || state.busy) return false;
     if (!state.ready) {
       toast("模型尚未就绪，请查看服务日志。", "error");
-      return;
+      return false;
     }
     if (state.coverage < 0.03) {
       toast("先涂抹水印区域，再开始修复。", "error");
-      return;
+      return false;
     }
 
     if (state.result) {
@@ -1042,9 +1439,11 @@
     state.busy = true;
     el.runBtn.disabled = true;
     document.body.classList.add("is-busy");
-    el.processing.hidden = false;
+    if (!options.batch) {
+      el.processing.hidden = false;
+      startProcessingClock();
+    }
     el.brushCursor.hidden = true;
-    startProcessingClock();
     refreshControls();
 
     try {
@@ -1081,15 +1480,19 @@
         coverage: Number(response.headers.get("X-Coverage")) || state.coverage,
       };
       setResult(blob, url, meta);
-      toast(`修复完成 · ${(meta.totalMs / 1000).toFixed(1)} 秒`, "success", 3600);
+      if (!options.batch) toast(`修复完成 · ${(meta.totalMs / 1000).toFixed(1)} 秒`, "success", 3600);
+      return true;
     } catch (error) {
       toast(error.message || "处理失败，请稍后重试。", "error", 6000);
       refreshControls();
+      return false;
     } finally {
       state.busy = false;
       document.body.classList.remove("is-busy");
-      stopProcessingClock();
-      el.processing.hidden = true;
+      if (!options.batch) {
+        stopProcessingClock();
+        el.processing.hidden = true;
+      }
       refreshControls();
     }
   }
@@ -1241,7 +1644,10 @@
       if (!imageResponse.ok || !maskResponse.ok) throw new Error("示例素材不可用");
       const [imageBlob, maskBlob] = await Promise.all([imageResponse.blob(), maskResponse.blob()]);
       const file = new File([imageBlob], "lama-lake-demo.jpg", { type: "image/jpeg" });
-      await loadFile(file, { maskBlob, demo: true });
+      const added = await addFiles([file], { quiet: true });
+      if (!added.length) throw new Error("示例素材不可用");
+      await addMaskRaster(maskBlob);
+      toast("示例已载入，遮罩也准备好了。可以直接开始去水印。", "info", 4600);
     } catch {
       toast("示例素材载入失败，请直接上传一张图片。", "error");
     } finally {
@@ -1270,10 +1676,19 @@
     el.uploadTool.addEventListener("click", () => el.fileInput.click());
     el.replaceBtn.addEventListener("click", () => el.fileInput.click());
     el.fileInput.addEventListener("change", () => {
-      const file = el.fileInput.files?.[0];
+      const files = Array.from(el.fileInput.files || []);
       el.fileInput.value = "";
-      if (file) loadFile(file);
+      if (files.length) addFiles(files);
     });
+    el.batchAddBtn.addEventListener("click", () => el.batchInput.click());
+    el.batchInput.addEventListener("change", () => {
+      const files = Array.from(el.batchInput.files || []);
+      el.batchInput.value = "";
+      if (files.length) addFiles(files);
+    });
+    el.applyMaskBtn.addEventListener("click", applyMaskToAll);
+    el.batchRunBtn.addEventListener("click", runBatch);
+    el.batchExportBtn.addEventListener("click", exportBatchZip);
     el.loadDemo.addEventListener("click", loadDemoImage);
 
     el.demoPhoto.addEventListener("pointerdown", beginDemoDrag);
@@ -1453,7 +1868,7 @@
       el.dragOverlay.hidden = true;
       el.dropzone.classList.remove("is-dragover");
       const file = event.dataTransfer.files?.[0];
-      if (file) loadFile(file);
+      if (file) addFiles(event.dataTransfer.files);
     });
 
     document.addEventListener("paste", (event) => {
@@ -1461,7 +1876,7 @@
       const imageItem = items.find((item) => item.type.startsWith("image/"));
       if (!imageItem) return;
       const file = imageItem.getAsFile();
-      if (file) loadFile(file);
+      if (file) addFiles([file]);
     });
 
     document.addEventListener("keydown", (event) => {
@@ -1519,6 +1934,14 @@
       if (event.key === "1") {
         event.preventDefault();
         actualPixels();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && (key === "arrowleft" || key === "arrowright")) {
+        if (state.items.length > 1 && !state.busy && !state.batchRunning) {
+          event.preventDefault();
+          const next = state.index + (key === "arrowright" ? 1 : -1);
+          activate((next + state.items.length) % state.items.length);
+        }
         return;
       }
       if (["arrowleft", "arrowright", "arrowup", "arrowdown"].includes(key)) {
@@ -1591,6 +2014,7 @@
     setTool("brush");
     applyCompare();
     setDemoSplit(54);
+    renderBatchList();
     loadHealth();
   }
 
