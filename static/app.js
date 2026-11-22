@@ -9,11 +9,15 @@
   const MAX_PIXELS = 60_000_000;
 
   const el = {
+    workspace: $(".workspace"),
+    inspector: $("#inspector"),
+    stageTopline: $("#stageTopline"),
     enginePill: $("#enginePill"),
+    engineDetail: $("#engineDetail"),
+    fileInfo: $("#fileInfo"),
+    brushPanel: $("#brushPanel"),
     engineLabel: $("#engineLabel"),
-    topFileName: $("#topFileName"),
     stageTitle: $("#stageTitle"),
-    stageFileMeta: $("#stageFileMeta"),
     stage: $("#stage"),
     emptyState: $("#emptyState"),
     dropzone: $("#dropzone"),
@@ -31,7 +35,6 @@
     maskCanvas: $("#maskCanvas"),
     compareLine: $("#compareLine"),
     compareHandle: $("#compareHandle"),
-    compareTags: $("#compareTags"),
     compareHint: $("#compareHint"),
     brushCursor: $("#brushCursor"),
     brushPreview: $("#brushPreview"),
@@ -39,21 +42,16 @@
     brushPreviewLabel: $("#brushPreviewLabel"),
     dragOverlay: $("#dragOverlay"),
     processing: $("#processing"),
-    procStage: $("#procStage"),
-    procDetail: $("#procDetail"),
     procElapsed: $("#procElapsed"),
     canvasToolbar: $("#canvasToolbar"),
-    stageTip: $("#stageTip"),
     zoomDisplay: $("#zoomDisplay"),
     viewSwitch: $("#viewSwitch"),
     backToResultBtn: $("#backToResultBtn"),
     editMaskBtn: $("#editMaskBtn"),
-    replaceBtn: $("#replaceBtn"),
     uploadTool: $("#uploadTool"),
     undoBtn: $("#undoBtn"),
     redoBtn: $("#redoBtn"),
     clearBtn: $("#clearBtn"),
-    railBrushValue: $("#railBrushValue"),
     brushSize: $("#brushSize"),
     brushValue: $("#brushValue"),
     brushLabel: $("#brushLabel"),
@@ -77,28 +75,23 @@
     dilateValue: $("#dilateValue"),
     feather: $("#feather"),
     featherValue: $("#featherValue"),
-    qualityState: $("#qualityState"),
     qualityEstimate: $("#qualityEstimate"),
-    maskState: $("#maskState"),
     maskLabel: $("#maskLabel"),
     dimsLabel: $("#dimsLabel"),
-    footerDevice: $("#footerDevice"),
-    modelDevice: $("#modelDevice"),
     runPanel: $("#runPanel"),
     resultPanel: $("#resultPanel"),
     runBtn: $("#runBtn"),
     actionHint: $("#actionHint"),
     resultMeta: $("#resultMeta"),
-    resultDevice: $("#resultDevice"),
     downloadBtn: $("#downloadBtn"),
     copyBtn: $("#copyBtn"),
-    adjustMaskBtn: $("#adjustMaskBtn"),
     rerunBtn: $("#rerunBtn"),
     helpBtn: $("#helpBtn"),
     helpDialog: $("#helpDialog"),
     closeHelpBtn: $("#closeHelpBtn"),
     toastStack: $("#toastStack"),
   };
+  const toolButtons = $$("[data-tool]");
 
   const maskCtx = el.maskCanvas.getContext("2d", { willReadFrequently: true });
   let itemSeq = 0;
@@ -252,18 +245,13 @@
       if (state.ready) {
         el.enginePill.classList.add("is-ready");
         const device = health.device === "cuda" ? "CUDA" : "CPU";
-        el.engineLabel.textContent = `${device} · 就绪`;
-        el.enginePill.title = `${health.model} · ${device}${health.gpu ? ` · ${health.gpu}` : ""} · 本地推理`;
-        el.modelDevice.textContent = health.device === "cuda" ? "CUDA" : "CPU";
-        const threads = health.threads ? ` · ${health.threads} 线程` : "";
-        el.footerDevice.textContent = health.device === "cuda"
-          ? `CUDA${health.gpu ? ` · ${shortGpu(health.gpu)}` : ""}`
-          : `CPU${threads}`;
+        el.engineLabel.textContent = "本地就绪";
+        const hardware = health.gpu ? shortGpu(health.gpu) : device;
+        el.engineDetail.textContent = [health.model, hardware, "本地推理"].filter(Boolean).join(" · ");
       } else {
         el.enginePill.classList.add("is-error");
         el.engineLabel.textContent = "模型未就绪";
-        el.enginePill.title = health.error || "模型加载失败";
-        el.footerDevice.textContent = "模型未就绪";
+        el.engineDetail.textContent = health.error || "模型加载失败";
         if (health.error) toast(health.error, "error", 7000);
       }
       updateEstimate();
@@ -273,7 +261,7 @@
       el.enginePill.classList.remove("is-loading", "is-ready");
       el.enginePill.classList.add("is-error");
       el.engineLabel.textContent = "服务连接失败";
-      el.footerDevice.textContent = "离线";
+      el.engineDetail.textContent = "请确认本地服务已启动";
       toast("无法连接本地推理服务，请确认服务已启动。", "error", 6000);
       refreshControls();
     }
@@ -388,18 +376,12 @@
     el.maskCanvas.height = item.naturalH;
     redrawMask();
     el.maskLabel.textContent = `遮罩 ${item.coverage.toFixed(1)}%`;
-    el.maskState.textContent = item.coverage < 0.03
-      ? "未标记"
-      : item.coverage > 75
-        ? `覆盖 ${item.coverage.toFixed(0)}%`
-        : `已标记 ${item.coverage.toFixed(1)}%`;
     el.emptyState.hidden = true;
     el.artboardWrap.hidden = false;
     el.canvasToolbar.hidden = false;
-    el.replaceBtn.hidden = false;
-    el.topFileName.textContent = item.fileName;
-    el.stageTitle.textContent = baseName(item.fileName);
-    el.stageFileMeta.textContent = `${item.naturalW} × ${item.naturalH}`;
+    el.fileInfo.open = false;
+    el.fileInfo.hidden = false;
+    el.stageTitle.textContent = item.fileName;
     el.dimsLabel.textContent = `${item.naturalW} × ${item.naturalH} px`;
     document.title = `${baseName(item.fileName)} · LAMA 清痕`;
     hideBrushPreview();
@@ -428,8 +410,7 @@
     el.resultPanel.hidden = false;
     el.runPanel.hidden = true;
     el.resultMeta.textContent = `${meta.width} × ${meta.height} · ${(meta.totalMs / 1000).toFixed(1)}s`;
-    el.resultDevice.textContent = meta.device === "cuda" ? "CUDA" : "CPU";
-    el.replaceBtn.hidden = false;
+    el.fileInfo.hidden = false;
   }
 
   function resetMaskCanvas() {
@@ -487,8 +468,8 @@
     const oldDisplay = state.zoom * state.fitW / Math.max(1, state.naturalW);
     const rect = el.stage.getBoundingClientRect();
     const narrow = window.matchMedia("(max-width: 620px)").matches;
-    const padX = narrow ? 24 : 78;
-    const padY = narrow ? 74 : 116;
+    const padX = narrow ? 20 : 48;
+    const padY = narrow ? 32 : 64;
     const availW = Math.max(200, rect.width - padX);
     const availH = Math.max(180, rect.height - padY);
     const scale = Math.min(availW / state.naturalW, availH / state.naturalH, 1);
@@ -634,13 +615,6 @@
       item.coverage = measureCoverage(item);
       state.coverage = item.coverage;
       el.maskLabel.textContent = `遮罩 ${item.coverage.toFixed(1)}%`;
-      if (item.coverage < 0.03) {
-        el.maskState.textContent = "未标记";
-      } else if (item.coverage > 75) {
-        el.maskState.textContent = `覆盖 ${item.coverage.toFixed(0)}%`;
-      } else {
-        el.maskState.textContent = `已标记 ${item.coverage.toFixed(1)}%`;
-      }
       refreshControls();
       renderBatchList();
     }, 90);
@@ -699,7 +673,6 @@
     redrawMask();
     state.coverage = 0;
     el.maskLabel.textContent = "遮罩 0.0%";
-    el.maskState.textContent = "未标记";
     updateCoverage();
     refreshControls();
     toast("遮罩已清空，可用 Ctrl+Z 撤销。", "info", 2600);
@@ -992,16 +965,16 @@
 
   // ------------------------------------------------------------------ view
   function setMode(mode) {
+    setBrushPanel(false);
     state.mode = mode;
     const hasResult = Boolean(state.result);
     const showResult = mode === "result" || mode === "compare";
     el.resultLayer.hidden = !showResult;
     el.beforeLayer.hidden = mode !== "compare";
     el.compareLine.hidden = mode !== "compare";
-    el.compareTags.hidden = mode !== "compare";
     el.compareHint.hidden = mode !== "compare";
+    el.workspace.classList.toggle("is-reviewing", showResult);
     el.maskCanvas.hidden = mode !== "edit";
-    el.stageTip.hidden = mode !== "edit";
     el.viewSwitch.hidden = !hasResult || mode === "edit";
     el.editMaskBtn.hidden = !hasResult || mode === "edit";
     el.backToResultBtn.hidden = !hasResult || mode !== "edit";
@@ -1009,7 +982,7 @@
       $$("button", el.viewSwitch).forEach((button) => {
         const active = button.dataset.view === mode;
         button.classList.toggle("is-active", active);
-        button.setAttribute("aria-selected", active ? "true" : "false");
+        button.setAttribute("aria-pressed", String(active));
       });
     }
     el.artboard.classList.toggle("is-pan-ready", state.tool === "pan" || state.spaceDown);
@@ -1215,19 +1188,16 @@
     el.resultImage.removeAttribute("src");
     el.artboardWrap.hidden = true;
     el.canvasToolbar.hidden = true;
-    el.replaceBtn.hidden = true;
+    el.fileInfo.open = false;
+    el.fileInfo.hidden = true;
     el.emptyState.hidden = false;
     el.resultPanel.hidden = true;
     el.runPanel.hidden = false;
-    el.topFileName.textContent = "未载入画面";
     el.stageTitle.textContent = "等待画布";
-    el.stageFileMeta.textContent = "";
     el.dimsLabel.textContent = "— × —";
     el.maskLabel.textContent = "遮罩 0.0%";
-    el.maskState.textContent = "未标记";
     document.title = "LAMA 清痕 · 单帧去水印工作台";
     setMode("edit");
-    el.stageTip.hidden = true;
     el.brushCursor.hidden = true;
     hideBrushPreview();
     maskCtx.clearRect(0, 0, el.maskCanvas.width, el.maskCanvas.height);
@@ -1237,8 +1207,8 @@
 
   function renderBatchList() {
     const count = state.items.length;
-    el.batchBar.hidden = count === 0;
-    el.batchSection.hidden = count === 0;
+    el.batchBar.hidden = count < 2;
+    el.batchSection.hidden = count < 2;
     el.batchCount.textContent = `${count} 张`;
     el.batchList.replaceChildren();
     let dragSource = null;
@@ -1248,25 +1218,23 @@
       thumb.draggable = true;
       thumb.tabIndex = 0;
       thumb.setAttribute("role", "button");
-      thumb.setAttribute("aria-label", `第 ${index + 1} 张：${item.fileName}`);
+      const status = item.result ? "已修复" : item.coverage > 0.03 ? "已标记" : "未标记";
+      thumb.setAttribute("aria-label", `第 ${index + 1} 张：${item.fileName}，${status}`);
+      thumb.setAttribute("aria-pressed", String(index === state.index));
       if (index === state.index) thumb.classList.add("is-active");
       if (item.result) thumb.classList.add("is-done");
-      thumb.title = `${index + 1}. ${item.fileName}（拖动可排序）`;
 
       const image = document.createElement("img");
       image.src = item.url;
       image.alt = "";
       image.draggable = false;
 
-      const badge = document.createElement("span");
-      badge.className = "batch-thumb-index";
-      badge.textContent = String(index + 1);
-      thumb.append(image, badge);
+      thumb.append(image);
 
-      if (item.coverage > 0.03) {
+      if (item.coverage > 0.03 && !item.result) {
         const mask = document.createElement("span");
         mask.className = "batch-thumb-mask";
-        mask.textContent = `${item.coverage.toFixed(0)}%`;
+        mask.textContent = "已标记";
         thumb.append(mask);
       }
       if (item.result) {
@@ -1296,7 +1264,7 @@
       };
       thumb.addEventListener("click", open);
       thumb.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.target === thumb && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           open();
         }
@@ -1523,25 +1491,28 @@
     const busy = state.busy;
     const canRun = hasImage && hasMask && state.ready && !busy;
 
+    el.workspace.classList.toggle("has-image", hasImage);
+    el.stageTopline.hidden = !hasImage;
+    el.inspector.hidden = !hasImage;
+    toolButtons.forEach((button) => {
+      button.disabled = !hasImage || busy || (state.mode !== "edit" && button.dataset.tool !== "pan");
+    });
+    if (busy) setBrushPanel(false);
     el.runBtn.disabled = !canRun;
+    el.rerunBtn.disabled = busy;
     el.undoBtn.disabled = !hasImage || busy || !canUndo();
     el.redoBtn.disabled = !hasImage || busy || state.redo.length === 0;
     el.clearBtn.disabled = !hasImage || busy || !hasMask;
 
-    if (!hasImage) {
-      el.actionHint.textContent = "先上传一张图片";
-    } else if (!state.ready) {
-      el.actionHint.textContent = "本地模型尚未就绪";
-    } else if (!hasMask) {
-      el.actionHint.textContent = "涂抹水印区域后即可开始";
-    } else if (busy) {
-      el.actionHint.textContent = "正在本机重建画面…";
-    } else {
-      const seconds = estimateSeconds();
-      el.actionHint.textContent = `${deviceName()} 推理 · 预计约 ${formatSeconds(seconds)}`;
+    let hint = "先上传一张图片";
+    if (hasImage) {
+      if (busy) hint = "正在本机修复…";
+      else if (!state.ready) hint = "本地模型尚未就绪";
+      else if (!hasMask) hint = "先用画笔涂抹水印";
+      else hint = `预计约 ${formatSeconds(estimateSeconds())}`;
     }
+    if (el.actionHint.textContent !== hint) el.actionHint.textContent = hint;
     el.qualityEstimate.textContent = estimateLabel();
-    el.modelDevice.textContent = state.health?.device === "cuda" ? "CUDA" : "CPU";
   }
 
   function currentMegapixels() {
@@ -1564,12 +1535,11 @@
   }
 
   function estimateLabel() {
-    const mp = currentMegapixels();
     const resized = state.image
       && Math.max(state.naturalW, state.naturalH) > state.maxSide;
     const size = state.image
       ? (resized ? `缩放至 ${state.maxSide}px` : "原尺寸")
-      : "1600px";
+      : `${state.maxSide}px`;
     return `${size} · 预计约 ${formatSeconds(estimateSeconds())} · ${deviceName()} 推理`;
   }
 
@@ -1580,7 +1550,7 @@
   async function runInpaint(options = {}) {
     if (!state.image || !state.file || state.busy) return false;
     if (!state.ready) {
-      toast("模型尚未就绪，请查看服务日志。", "error");
+      toast("本地模型尚未就绪。请打开顶部的运行状态查看详情。", "error");
       return false;
     }
     if (state.coverage < 0.03) {
@@ -1637,7 +1607,6 @@
         coverage: Number(response.headers.get("X-Coverage")) || state.coverage,
       };
       setResult(blob, url, meta);
-      if (!options.batch) toast(`修复完成 · ${(meta.totalMs / 1000).toFixed(1)} 秒`, "success", 3600);
       return true;
     } catch (error) {
       toast(error.message || "处理失败，请稍后重试。", "error", 6000);
@@ -1659,20 +1628,7 @@
     state.procStarted = performance.now();
     const tick = () => {
       const seconds = (performance.now() - state.procStarted) / 1000;
-      el.procElapsed.textContent = `${seconds.toFixed(1)}s`;
-      if (seconds < 1.6) {
-        el.procStage.textContent = "正在分析遮罩…";
-        el.procDetail.textContent = "读取画面与边缘信息";
-      } else if (seconds < 4.2) {
-        el.procStage.textContent = "正在重建纹理…";
-        el.procDetail.textContent = "LaMa 正在填补缺失区域";
-      } else if (seconds < 8) {
-        el.procStage.textContent = "正在融合光影…";
-        el.procDetail.textContent = "把生成区域接回原画面";
-      } else {
-        el.procStage.textContent = "正在完成最后处理…";
-        el.procDetail.textContent = "大图与 CPU 推理会多花一点时间";
-      }
+      el.procElapsed.textContent = `${seconds.toFixed(1)} 秒`;
     };
     tick();
     state.procTimer = window.setInterval(tick, 120);
@@ -1719,9 +1675,8 @@
   function syncBrushControls() {
     const size = activeSize();
     el.brushSize.value = String(size);
-    el.brushValue.textContent = `${size} px`;
-    el.railBrushValue.textContent = String(size);
-    el.brushLabel.textContent = state.tool === "eraser" ? "橡皮尺寸" : "画笔尺寸";
+    el.brushValue.value = String(size);
+    el.brushLabel.textContent = state.tool === "eraser" ? "橡皮大小" : "画笔大小";
     updateSliderFill(el.brushSize);
     el.brushCursor.style.width = `${size}px`;
     el.brushCursor.style.height = `${size}px`;
@@ -1754,12 +1709,28 @@
   }
 
   // ------------------------------------------------------------------ tool
+  function setBrushPanel(open) {
+    if (!open && el.brushPanel.hidden) return;
+    const active = $(".rail-button.is-active");
+    if (!open && document.activeElement === el.brushValue) el.brushValue.blur();
+    el.brushPanel.hidden = !open;
+    if (open && el.brushPanel.parentElement !== active.parentElement) {
+      active.parentElement.append(el.brushPanel);
+    }
+    for (const button of $$('[aria-controls="brushPanel"]')) {
+      button.setAttribute("aria-expanded", String(open && button === active));
+    }
+  }
+
   function setTool(tool) {
     state.tool = tool === "eraser" || tool === "pan" ? tool : "brush";
-    $$("[data-tool]").forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.tool === state.tool);
+    toolButtons.forEach((button) => {
+      const selected = button.dataset.tool === state.tool;
+      button.classList.toggle("is-active", selected);
+      button.setAttribute("aria-pressed", String(selected));
     });
     el.artboard.classList.toggle("is-pan-ready", state.tool === "pan" || state.spaceDown);
+    setBrushPanel(!el.brushPanel.hidden && state.tool !== "pan");
     if (state.tool === "pan") {
       el.brushCursor.hidden = true;
       hideBrushPreview();
@@ -1771,9 +1742,10 @@
   function setQuality(side) {
     state.maxSide = Number(side);
     $$(".quality-options button").forEach((button) => {
-      button.classList.toggle("is-active", Number(button.dataset.side) === state.maxSide);
+      const selected = Number(button.dataset.side) === state.maxSide;
+      button.classList.toggle("is-active", selected);
+      button.setAttribute("aria-pressed", String(selected));
     });
-    el.qualityState.textContent = state.maxSide === 1280 ? "快速" : state.maxSide === 2048 ? "精细" : "标准";
     updateEstimate();
   }
 
@@ -1824,14 +1796,7 @@
   // ---------------------------------------------------------------- events
   function bindEvents() {
     el.dropzone.addEventListener("click", () => el.fileInput.click());
-    el.dropzone.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        el.fileInput.click();
-      }
-    });
     el.uploadTool.addEventListener("click", () => el.fileInput.click());
-    el.replaceBtn.addEventListener("click", () => el.fileInput.click());
     el.fileInput.addEventListener("change", () => {
       const files = Array.from(el.fileInput.files || []);
       el.fileInput.value = "";
@@ -1873,18 +1838,35 @@
       setDemoSplit(next);
     });
 
-    $$("[data-tool]").forEach((button) => {
-      button.addEventListener("click", () => setTool(button.dataset.tool));
+    toolButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.tool === state.tool && state.tool !== "pan") {
+          setBrushPanel(el.brushPanel.hidden);
+        } else {
+          setTool(button.dataset.tool);
+        }
+      });
     });
     $$(".quality-options button").forEach((button) => {
       button.addEventListener("click", () => setQuality(button.dataset.side));
     });
 
+    document.addEventListener("pointerdown", (event) => {
+      if (!event.target.closest(".tool-slot")) setBrushPanel(false);
+      for (const details of $$(".engine-info[open], .file-info[open]")) {
+        if (!details.contains(event.target)) details.open = false;
+      }
+    }, true);
     el.brushSize.addEventListener("input", () => {
-      const size = setActiveSize(el.brushSize.value);
-      el.brushCursor.style.width = `${size}px`;
-      el.brushCursor.style.height = `${size}px`;
+      setActiveSize(el.brushSize.value);
       showBrushPreview();
+    });
+    el.brushValue.addEventListener("change", () => {
+      setActiveSize(el.brushValue.value);
+      showBrushPreview();
+    });
+    el.brushValue.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") el.brushValue.blur();
     });
     el.dilate.addEventListener("input", () => {
       state.dilate = Number(el.dilate.value);
@@ -1912,7 +1894,6 @@
     el.rerunBtn.addEventListener("click", runInpaint);
     el.downloadBtn.addEventListener("click", downloadResult);
     el.copyBtn.addEventListener("click", copyResult);
-    el.adjustMaskBtn.addEventListener("click", () => setMode("edit"));
     el.editMaskBtn.addEventListener("click", () => setMode("edit"));
     el.backToResultBtn.addEventListener("click", () => setMode("compare"));
 
@@ -2047,7 +2028,22 @@
 
     document.addEventListener("keydown", (event) => {
       const target = event.target;
+      if (event.key === "Escape" && !el.helpDialog.open) {
+        const details = $(".engine-info[open], .file-info[open]");
+        if (!el.brushPanel.hidden) {
+          setBrushPanel(false);
+          $(".rail-button.is-active").focus();
+          return;
+        }
+        if (details) {
+          details.open = false;
+          details.querySelector("summary").focus();
+          return;
+        }
+      }
       const tag = target?.tagName;
+      if (tag === "SUMMARY" && (event.code === "Space" || event.key === "Enter")) return;
+      if (event.code === "Space" && target?.matches("button:focus-visible") && !target.closest(".canvas-toolbar")) return;
       const isRange = tag === "INPUT" && target?.type === "range";
       // Only text entry swallows shortcuts.  A focused slider used to block
       // B / E / H / Space after the brush size had been dragged.

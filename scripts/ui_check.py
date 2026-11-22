@@ -39,6 +39,36 @@ def check_space_pan_after_zoom(page: Page) -> None:
     page.locator("#fitBtn").click()
 
 
+def check_brush_panel(page: Page) -> None:
+    brush = page.locator('[data-tool="brush"]')
+    eraser = page.locator('[data-tool="eraser"]')
+    panel = page.locator("#brushPanel")
+    value = page.locator("#brushValue")
+    brush.click()
+    value.fill("31")
+    value.press("Enter")
+    eraser.click()
+    assert value.input_value() == "96"
+    brush.click()
+    assert value.input_value() == "31"
+    assert page.locator("#brushSize").input_value() == "31"
+
+    # The click dismissing the panel must also paint at the pointer.
+    canvas = page.locator("#maskCanvas")
+    sample_pixel = """canvas => canvas.getContext("2d").getImageData(
+        Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data[3]"""
+    assert canvas.evaluate(sample_pixel) == 0
+    canvas.click()
+    assert panel.is_hidden() and canvas.evaluate(sample_pixel) == 255
+    page.locator("#undoBtn").click()
+    assert canvas.evaluate(sample_pixel) == 0
+    brush.click()
+    value.fill("56")
+    value.press("Enter")
+    value.press("Escape")
+    assert panel.is_hidden() and brush.get_attribute("aria-expanded") == "false"
+
+
 def check_pan_corners_to_center(page: Page) -> None:
     artboard = page.locator("#artboard")
     stage = page.locator("#stage").bounding_box()
@@ -85,14 +115,19 @@ def run(viewport: dict, suffix: str, wait_result: bool = True) -> None:
         page.on("pageerror", lambda exc: page_errors.append(str(exc)))
         page.goto(URL, wait_until="networkidle")
         page.wait_for_timeout(600)
+        assert page.locator("#inspector").is_hidden()
         page.screenshot(path=str(SHOTS / f"01-empty-{suffix}.png"), full_page=False)
 
         page.locator("#loadDemo").click()
         page.wait_for_selector("#artboardWrap:not([hidden])", timeout=15000)
         page.wait_for_timeout(900)
-        coverage = page.locator("#maskLabel").inner_text()
-        dims = page.locator("#dimsLabel").inner_text()
+        coverage = page.locator("#maskLabel").text_content()
+        dims = page.locator("#dimsLabel").text_content()
+        primary = page.locator("#runBtn").bounding_box()
+        assert primary is not None and 0 <= primary["y"]
+        assert primary["y"] + primary["height"] <= viewport["height"]
         page.screenshot(path=str(SHOTS / f"02-editor-{suffix}.png"), full_page=False)
+        check_brush_panel(page)
         check_space_pan_after_zoom(page)
         check_pan_corners_to_center(page)
 

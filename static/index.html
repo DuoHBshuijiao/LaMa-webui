@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b0e0c">
+  <meta name="theme-color" content="#191b1d">
   <meta name="description" content="LaMa 单帧去水印工作台：在本机涂抹水印区域，用大遮罩修复模型重建画面纹理。">
   <title>LAMA 清痕 · 单帧去水印工作台</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20261118a">
+  <link rel="icon" href="/favicon.svg?v=20261122c" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css?v=20261122f">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -24,7 +24,7 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19.5 7"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0 4-4m-4 4-4-4"/><path d="M5 18v1.5h14V18"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
-    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><path d="M13 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6M4 17l5-5 4 4 3-3 4 4M18 3v6m-3-3h6"/><circle cx="8" cy="9" r="1"/></symbol>
     <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M9 3v2M15 3v2M9 19v2M15 19v2M3 9h2M3 15h2M19 9h2M19 15h2"/><rect x="10" y="10" width="4" height="4" rx=".5"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2"/></symbol>
     <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5M8 10.5h5M10.5 8v5"/></symbol>
@@ -32,7 +32,6 @@
     <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
     <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m10 6-6 6 6 6M4 12h16"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
-    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3c.6 4.8 1.4 5.6 6 6.2-4.6.6-5.4 1.4-6 6.2-.6-4.8-1.4-5.6-6-6.2 4.6-.6 5.4-1.4 6-6.2Z"/><path d="M19 15c.3 2 .7 2.4 2.5 2.7-1.8.3-2.2.7-2.5 2.7-.3-2-.7-2.4-2.5-2.7 1.8-.3 2.2-.7 2.5-2.7Z"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
   </svg>
@@ -53,67 +52,72 @@
         </span>
       </a>
 
-      <div class="topbar-context">
-        <span class="topbar-eyebrow">SINGLE FRAME STUDIO</span>
-        <span class="topbar-divider" aria-hidden="true"></span>
-        <span class="topbar-file" id="topFileName">未载入画面</span>
-      </div>
-
       <div class="topbar-actions">
-        <div class="engine-pill is-loading" id="enginePill" title="正在检查本地模型">
-          <span class="engine-dot" aria-hidden="true"></span>
-          <span id="engineLabel">正在连接模型</span>
-        </div>
-        <button class="icon-button topbar-help" id="helpBtn" type="button" aria-label="使用说明" data-tip="使用说明">
+        <details class="engine-info">
+          <summary class="engine-pill is-loading" id="enginePill">
+            <span class="engine-dot" aria-hidden="true"></span>
+            <span id="engineLabel">正在连接模型</span>
+          </summary>
+          <div class="info-popover">
+            <strong>运行信息</strong>
+            <span id="engineDetail">正在检查本地模型</span>
+            <span id="qualityEstimate"></span>
+          </div>
+        </details>
+        <button class="icon-button topbar-help" id="helpBtn" type="button" aria-label="使用说明">
           <svg><use href="#i-help"/></svg>
         </button>
       </div>
     </header>
 
     <main class="workspace">
-      <nav class="toolrail" aria-label="画布工具">
-        <button class="rail-button" id="uploadTool" type="button" aria-label="上传图片" data-tip="上传图片">
+      <div class="toolrail" role="group" aria-label="画布工具">
+        <button class="rail-button" id="uploadTool" type="button" aria-label="上传图片">
           <svg><use href="#i-image"/></svg>
         </button>
         <div class="rail-rule" aria-hidden="true"></div>
-        <button class="rail-button is-active" data-tool="brush" type="button" aria-label="画笔（B）" data-tip="画笔 B">
-          <svg><use href="#i-brush"/></svg>
-        </button>
-        <button class="rail-button" data-tool="eraser" type="button" aria-label="橡皮（E）" data-tip="橡皮 E">
-          <svg><use href="#i-eraser"/></svg>
-        </button>
-        <button class="rail-button" data-tool="pan" type="button" aria-label="拖动画布（H / 空格）" data-tip="拖动 H">
+        <div class="tool-slot">
+          <button class="rail-button is-active" aria-controls="brushPanel" aria-expanded="false" data-tool="brush" type="button" aria-label="画笔（B）">
+            <svg><use href="#i-brush"/></svg>
+          </button>
+          <div class="brush-panel" id="brushPanel" role="group" aria-labelledby="brushLabel" hidden>
+            <div class="slider-label">
+              <label id="brushLabel" for="brushSize">画笔大小</label>
+              <span class="brush-size-field"><input id="brushValue" type="number" min="8" max="220" step="1" value="56" aria-label="笔刷像素值"> px</span>
+            </div>
+            <input type="range" id="brushSize" min="8" max="220" step="1" value="56">
+          </div>
+        </div>
+        <div class="tool-slot">
+          <button class="rail-button" aria-controls="brushPanel" aria-expanded="false" data-tool="eraser" type="button" aria-label="橡皮（E）">
+            <svg><use href="#i-eraser"/></svg>
+          </button>
+        </div>
+        <button class="rail-button" data-tool="pan" type="button" aria-label="拖动画布（H / 空格）">
           <svg><use href="#i-hand"/></svg>
         </button>
         <div class="rail-rule" aria-hidden="true"></div>
-        <button class="rail-button" id="undoBtn" type="button" aria-label="撤销（Ctrl+Z）" data-tip="撤销 ⌘Z" disabled>
+        <button class="rail-button" id="undoBtn" type="button" aria-label="撤销（Ctrl+Z）" disabled>
           <svg><use href="#i-undo"/></svg>
         </button>
-        <button class="rail-button" id="redoBtn" type="button" aria-label="重做（Ctrl+Shift+Z）" data-tip="重做 ⇧⌘Z" disabled>
+        <button class="rail-button" id="redoBtn" type="button" aria-label="重做（Ctrl+Shift+Z）" disabled>
           <svg><use href="#i-redo"/></svg>
         </button>
-        <button class="rail-button is-danger" id="clearBtn" type="button" aria-label="清空遮罩" data-tip="清空遮罩" disabled>
+        <button class="rail-button is-danger" id="clearBtn" type="button" aria-label="清空遮罩" disabled>
           <svg><use href="#i-trash"/></svg>
         </button>
-        <div class="rail-spacer"></div>
-        <div class="rail-brush" id="railBrush">
-          <span class="rail-brush-label">SIZE</span>
-          <span class="rail-brush-value" id="railBrushValue">56</span>
-        </div>
-      </nav>
+      </div>
 
       <section class="stage-shell" aria-label="编辑画布">
-        <div class="stage-topline">
+        <div class="stage-topline" id="stageTopline" hidden>
           <div class="stage-heading">
-            <span class="stage-number">01</span>
             <span class="stage-title" id="stageTitle">等待画布</span>
-            <span class="stage-file-meta" id="stageFileMeta"></span>
           </div>
           <div class="stage-actions">
-            <div class="view-switch" id="viewSwitch" role="tablist" aria-label="结果视图" hidden>
-              <button type="button" data-view="original" role="tab" aria-selected="false">原图</button>
-              <button type="button" data-view="compare" role="tab" aria-selected="true" class="is-active">对比</button>
-              <button type="button" data-view="result" role="tab" aria-selected="false">结果</button>
+            <div class="view-switch" id="viewSwitch" role="group" aria-label="结果视图" hidden>
+              <button type="button" data-view="original" aria-pressed="false">原图</button>
+              <button type="button" data-view="compare" aria-pressed="true" class="is-active">对比</button>
+              <button type="button" data-view="result" aria-pressed="false">修复后</button>
             </div>
             <button class="stage-link" id="backToResultBtn" type="button" hidden>
               <svg><use href="#i-arrow-left"/></svg>返回结果
@@ -121,77 +125,57 @@
             <button class="stage-link" id="editMaskBtn" type="button" hidden>
               <svg><use href="#i-brush"/></svg>调整遮罩
             </button>
-            <button class="stage-link stage-link-strong" id="replaceBtn" type="button" hidden>
-              添加图片
-            </button>
+            <details class="file-info" id="fileInfo" hidden>
+              <summary aria-label="图片信息"><svg><use href="#i-info"/></svg></summary>
+              <div class="info-popover">
+                <strong>图片信息</strong>
+                <span id="dimsLabel"></span>
+                <span id="maskLabel"></span>
+                <button class="ghost-button ghost-danger" id="removeItemBtn" type="button">移除这张</button>
+              </div>
+            </details>
           </div>
         </div>
 
         <div class="stage" id="stage">
-          <div class="stage-grid" aria-hidden="true"></div>
-          <div class="stage-glow" aria-hidden="true"></div>
-
           <div class="empty-state" id="emptyState">
             <div class="empty-copy">
-              <div class="kicker"><span class="kicker-line"></span>LOCAL INPAINTING · LAMA</div>
-              <h1 class="empty-title">把水印，<br><em>从画面里拿掉。</em></h1>
-              <p class="empty-lead">上传一张照片，涂抹水印区域，LaMa 会重建被遮挡的纹理与光影。<br>整条流程只在这台电脑上完成。</p>
+              <h1 class="empty-title">移除图片水印</h1>
+              <p class="empty-lead">添加图片，涂抹水印，再预览和下载修复结果。</p>
 
-              <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="选择或拖入图片">
+              <button class="dropzone" id="dropzone" type="button" aria-label="添加图片">
                 <span class="dropzone-icon"><svg><use href="#i-upload"/></svg></span>
                 <span class="dropzone-text">
-                  <strong>拖入照片，或点击选择（可多选）</strong>
-                  <span>JPG · PNG · WEBP / 最大 40MB</span>
+                  <strong>添加图片</strong>
+                  <span>也可拖入或粘贴 · 单张最大 40 MB</span>
                 </span>
                 <span class="dropzone-arrow"><svg><use href="#i-chevron"/></svg></span>
-              </div>
+              </button>
               <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,image/bmp" multiple hidden>
 
               <div class="sample-line">
-                <span>没有素材？</span>
-                <button type="button" id="loadDemo">载入带水印的示例</button>
-                <span class="sample-dot">·</span>
-                <span>遮罩已备好</span>
+                <button type="button" id="loadDemo">试用示例图片</button>
               </div>
 
-              <div class="empty-steps" aria-label="使用步骤">
-                <span><b>01</b> 上传照片</span>
-                <span><b>02</b> 涂抹水印</span>
-                <span><b>03</b> 重建画面</span>
-              </div>
+              <p class="local-note"><svg aria-hidden="true"><use href="#i-lock"/></svg>图片仅在本机处理</p>
             </div>
 
-            <div class="empty-visual">
-              <div class="demo-frame" id="demoFrame" style="--demo-split: 54%">
-                <div class="demo-photo" id="demoPhoto" role="slider" tabindex="0"
-                     aria-label="拖动画面比较水印修复前后"
-                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="54">
-                  <img src="/samples/demo-watermarked.jpg" alt="" draggable="false">
-                  <div class="demo-clean">
-                    <img src="/samples/demo-result.jpg" alt="" draggable="false">
-                  </div>
-                  <span class="demo-line" aria-hidden="true"></span>
-                  <span class="demo-handle" aria-hidden="true">
-                    <svg><use href="#i-chevron"/></svg><svg><use href="#i-chevron"/></svg>
-                  </span>
-                  <span class="demo-tag demo-tag-left">原图</span>
-                  <span class="demo-tag demo-tag-right">修复后</span>
-                  <span class="demo-hint" aria-hidden="true"><b>↔</b> 拖动画面查看前后</span>
+            <figure class="demo-frame" id="demoFrame" style="--demo-split: 54%">
+              <div class="demo-labels" aria-hidden="true"><span>原图</span><span>修复后</span></div>
+              <div class="demo-photo" id="demoPhoto" role="slider" tabindex="0"
+                   aria-label="拖动画面比较水印修复前后"
+                   aria-valuemin="0" aria-valuemax="100" aria-valuenow="54">
+                <img src="/samples/demo-watermarked.jpg" alt="" draggable="false">
+                <div class="demo-clean">
+                  <img src="/samples/demo-result.jpg" alt="" draggable="false">
                 </div>
-                <div class="demo-caption">
-                  <span><i></i>LAKE BRAIES · ITALY</span>
-                  <span>LAMA / 2026</span>
-                </div>
+                <span class="demo-line" aria-hidden="true"></span>
+                <span class="demo-handle" aria-hidden="true">
+                  <svg><use href="#i-chevron"/></svg><svg><use href="#i-chevron"/></svg>
+                </span>
               </div>
-              <div class="demo-stamp" aria-hidden="true">
-                <svg><use href="#i-sparkle"/></svg>
-                <span>单帧<br>修复</span>
-              </div>
-              <div class="visual-note" aria-hidden="true">
-                <span class="visual-note-index">A—01</span>
-                <p>不是覆盖，<br>是重新画一遍。</p>
-              </div>
-            </div>
+              <figcaption class="demo-caption">拖动分割线，比较修复前后</figcaption>
+            </figure>
           </div>
 
           <div class="artboard-wrap" id="artboardWrap" hidden>
@@ -209,18 +193,9 @@
 
           <div class="compare-line" id="compareLine" hidden>
             <span class="compare-handle" id="compareHandle" role="slider" tabindex="0"
-                  title="拖动对比；Shift+方向键微调，Home/End 到两端"
                   aria-label="对比分割线" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
               <svg viewBox="0 0 24 24"><path d="m9 7-5 5 5 5M15 7l5 5-5 5"/></svg>
             </span>
-          </div>
-
-          <div class="compare-tags" id="compareTags" hidden aria-hidden="true">
-            <span>原图</span>
-            <span>LaMa 修复</span>
-          </div>
-          <div class="compare-hint" id="compareHint" hidden aria-hidden="true">
-            <b>↔</b> 拖动画面对比 · 方向键移动
           </div>
 
           <div class="brush-cursor" id="brushCursor" hidden></div>
@@ -232,12 +207,11 @@
           <div class="drag-overlay" id="dragOverlay" hidden>
             <div class="drag-card">
               <span><svg><use href="#i-upload"/></svg></span>
-              <strong>松手，开始修复</strong>
-              <small>图片会留在这台电脑上</small>
+              <strong>松开鼠标，添加图片</strong>
             </div>
           </div>
 
-          <div class="processing" id="processing" hidden aria-live="polite">
+          <div class="processing" id="processing" hidden>
             <div class="processing-shade"></div>
             <div class="processing-card">
               <div class="processing-mark">
@@ -245,37 +219,28 @@
                 <svg><use href="#i-wand"/></svg>
               </div>
               <div class="processing-copy">
-                <span class="processing-kicker">LAMA IS PAINTING</span>
-                <strong id="procStage">正在分析遮罩…</strong>
-                <span id="procDetail">准备画面结构</span>
+                <strong>正在修复图片</strong>
+                <span>本机处理中</span>
               </div>
-              <span class="processing-time" id="procElapsed">0.0s</span>
-              <div class="processing-track"><span></span></div>
+              <span class="processing-time" id="procElapsed" aria-hidden="true">0.0 秒</span>
             </div>
           </div>
 
-          <div class="canvas-toolbar" id="canvasToolbar" hidden>
-            <button type="button" id="zoomOutBtn" aria-label="缩小" data-tip="缩小">
+        </div>
+        <div class="canvas-footer" id="canvasToolbar" hidden>
+          <p class="canvas-context" id="compareHint" hidden>左侧原图 · 右侧修复后</p>
+          <div class="canvas-toolbar" aria-label="缩放控制" role="group">
+            <button type="button" id="zoomOutBtn" aria-label="缩小">
               <svg><use href="#i-zoom-out"/></svg>
             </button>
-            <button type="button" class="zoom-display" id="zoomDisplay" aria-label="实际像素" title="切换到 100%">—</button>
-            <button type="button" id="zoomInBtn" aria-label="放大" data-tip="放大">
+            <button type="button" class="zoom-display" id="zoomDisplay" aria-label="实际像素">—</button>
+            <button type="button" id="zoomInBtn" aria-label="放大">
               <svg><use href="#i-zoom-in"/></svg>
             </button>
             <span class="canvas-toolbar-rule" aria-hidden="true"></span>
-            <button type="button" id="fitBtn" aria-label="适应画面" data-tip="适应画面 0">
+            <button type="button" id="fitBtn" aria-label="适应画面">
               <svg><use href="#i-fit"/></svg>
             </button>
-          </div>
-
-          <div class="stage-tip" id="stageTip" hidden>
-            <span class="tip-key">B</span> 涂抹水印
-            <span class="tip-sep"></span>
-            <span class="tip-key">X</span> 切换画笔/橡皮
-            <span class="tip-sep"></span>
-            <span class="tip-key">空格</span> 拖动
-            <span class="tip-sep"></span>
-            <span class="tip-key">Ctrl</span> 滚轮缩放
           </div>
         </div>
 
@@ -290,109 +255,39 @@
           </button>
           <input type="file" id="batchInput" accept="image/png,image/jpeg,image/webp,image/bmp" multiple hidden>
         </div>
-
-        <footer class="stage-footer">
-          <div class="footer-fact" id="dimsLabel">— × —</div>
-          <span class="footer-rule" aria-hidden="true"></span>
-          <div class="footer-fact" id="maskLabel">遮罩 0.0%</div>
-          <span class="footer-rule" aria-hidden="true"></span>
-          <div class="footer-fact footer-device" id="footerDevice">等待模型</div>
-          <div class="footer-spacer"></div>
-          <div class="footer-shortcuts">
-            <span><kbd>B</kbd> 画笔</span>
-            <span><kbd>E</kbd> 橡皮</span>
-            <span><kbd>X</kbd> 切换</span>
-            <span><kbd>[</kbd><kbd>]</kbd> 尺寸</span>
-            <span><kbd>Space</kbd> 拖拽</span>
-            <span><kbd>Ctrl</kbd><kbd>Z</kbd> 撤销</span>
-          </div>
-        </footer>
       </section>
 
-      <aside class="inspector" aria-label="修复设置">
+      <aside class="inspector" id="inspector" aria-label="修复设置" hidden>
         <div class="inspector-head">
-          <div>
-            <span class="inspector-kicker">INPAINT SETTINGS</span>
-            <h2>修复设置</h2>
-          </div>
-          <span class="frame-chip">FRAME 01</span>
+          <h2>修复设置</h2>
         </div>
 
         <div class="inspector-scroll">
-          <section class="panel-section" id="maskSection">
-            <div class="section-heading">
-              <span class="section-index">01</span>
-              <h3>标记水印</h3>
-              <span class="section-state" id="maskState">未标记</span>
-            </div>
-
-            <div class="tool-toggle" role="group" aria-label="绘制工具">
-              <button type="button" data-tool="brush" class="is-active">
-                <svg><use href="#i-brush"/></svg>画笔
-              </button>
-              <button type="button" data-tool="eraser">
-                <svg><use href="#i-eraser"/></svg>橡皮
-              </button>
-            </div>
-
-            <div class="slider-row">
-              <div class="slider-label"><label for="brushSize" id="brushLabel">画笔尺寸</label><output id="brushValue">56 px</output></div>
-              <input type="range" id="brushSize" min="8" max="220" step="2" value="56">
-              <div class="slider-scale"><span>精细</span><span>大面积</span></div>
-              <div class="slider-preview-note"><i></i>调整时，画面上会显示笔刷实际大小</div>
-            </div>
-
-            <p class="section-hint">沿着水印边缘涂抹，覆盖到文字或 logo 的外轮廓即可。画布会自动扩展遮罩。</p>
-          </section>
-
           <section class="panel-section">
-            <div class="section-heading">
-              <span class="section-index">02</span>
-              <h3>边缘处理</h3>
+            <div class="section-heading"><h3>修复质量</h3></div>
+            <div class="quality-options" role="group" aria-label="修复质量">
+              <button type="button" data-side="1280" aria-pressed="false">快速</button>
+              <button type="button" data-side="1600" aria-pressed="true" class="is-active">标准</button>
+              <button type="button" data-side="2048" aria-pressed="false">精细</button>
             </div>
-
+          </section>
+          <details class="panel-section edge-settings">
+            <summary>边缘处理 <svg aria-hidden="true"><use href="#i-chevron"/></svg></summary>
             <div class="slider-row">
               <div class="slider-label"><label for="dilate">遮罩扩展</label><output id="dilateValue">6 px</output></div>
               <input type="range" id="dilate" min="0" max="24" step="1" value="6">
-              <div class="slider-scale"><span>贴合</span><span>更干净</span></div>
             </div>
 
             <div class="slider-row">
               <div class="slider-label"><label for="feather">边缘羽化</label><output id="featherValue">2.0 px</output></div>
               <input type="range" id="feather" min="0" max="6" step="0.5" value="2">
-              <div class="slider-scale"><span>硬边</span><span>柔和</span></div>
             </div>
 
             <p class="section-hint">水印有投影或半透明毛边时，把扩展调到 8–12px。</p>
-          </section>
-
-          <section class="panel-section">
-            <div class="section-heading">
-              <span class="section-index">03</span>
-              <h3>推理精度</h3>
-              <span class="section-state" id="qualityState">标准</span>
-            </div>
-
-            <div class="quality-options" role="group" aria-label="推理精度">
-              <button type="button" data-side="1280"><strong>快速</strong><span>1280px</span></button>
-              <button type="button" data-side="1600" class="is-active"><strong>标准</strong><span>1600px</span></button>
-              <button type="button" data-side="2048"><strong>精细</strong><span>2048px</span></button>
-            </div>
-            <p class="quality-estimate" id="qualityEstimate">预计约 11 秒 · CPU 推理</p>
-
-            <div class="model-card">
-              <span class="model-mark">L</span>
-              <div class="model-copy">
-                <strong>LaMa · Big</strong>
-                <span>大遮罩图像修复模型</span>
-              </div>
-              <span class="model-device" id="modelDevice">CPU</span>
-            </div>
-          </section>
+          </details>
 
           <section class="panel-section" id="batchSection" hidden>
             <div class="section-heading">
-              <span class="section-index">04</span>
               <h3>批量处理</h3>
               <span class="section-state" id="batchState">0 / 0 已完成</span>
             </div>
@@ -414,50 +309,42 @@
             <div class="batch-order">
               <button type="button" class="ghost-button" id="movePrevBtn" aria-label="把当前图片前移">← 前移</button>
               <button type="button" class="ghost-button" id="moveNextBtn" aria-label="把当前图片后移">后移 →</button>
-              <button type="button" class="ghost-button ghost-danger" id="removeItemBtn">移除这张</button>
             </div>
             <p class="batch-hint" id="batchProgress"></p>
-            <p class="section-hint">水印位置、大小相同的照片，套用同一张遮罩后一次处理完，再打包下载。拖动缩略图可以调整顺序。</p>
+            <p class="section-hint">水印位置和大小相同时，可复用同一张遮罩。</p>
           </section>
 
-          <div class="privacy-note">
-            <svg><use href="#i-lock"/></svg>
-            <p><strong>完全本地处理</strong><span>照片不会离开这台电脑，也不会被写入云端。</span></p>
-          </div>
         </div>
 
         <div class="inspector-action">
           <div class="run-panel" id="runPanel">
+            <p class="action-hint" id="actionHint" role="status" aria-atomic="true">先用画笔涂抹水印</p>
             <button class="primary-button" id="runBtn" type="button" disabled>
               <span class="button-icon"><svg><use href="#i-wand"/></svg></span>
               <span class="button-label">开始去水印</span>
               <kbd>Ctrl ↵</kbd>
             </button>
-            <p class="action-hint" id="actionHint">先上传一张图片</p>
           </div>
 
           <div class="result-panel" id="resultPanel" hidden>
-            <div class="result-summary">
+            <div class="result-summary" role="status">
               <span class="result-check"><svg><use href="#i-check"/></svg></span>
               <div>
                 <strong>修复完成</strong>
                 <span id="resultMeta">—</span>
               </div>
-              <span class="result-device" id="resultDevice">CPU</span>
             </div>
             <div class="result-actions">
               <button class="primary-button" id="downloadBtn" type="button">
                 <span class="button-icon"><svg><use href="#i-download"/></svg></span>
                 <span class="button-label">下载 PNG</span>
               </button>
-              <button class="secondary-icon-button" id="copyBtn" type="button" aria-label="复制到剪贴板" data-tip="复制图片">
+              <button class="secondary-icon-button" id="copyBtn" type="button" aria-label="复制到剪贴板">
                 <svg><use href="#i-copy"/></svg>
               </button>
             </div>
             <div class="result-links">
-              <button type="button" id="adjustMaskBtn">调整遮罩</button>
-              <span>·</span>
-              <button type="button" id="rerunBtn">再生成一版</button>
+              <button type="button" id="rerunBtn">重新修复</button>
             </div>
           </div>
         </div>
@@ -468,8 +355,7 @@
   <dialog class="help-dialog" id="helpDialog">
     <div class="help-head">
       <div>
-        <span class="inspector-kicker">FIELD NOTES / 01</span>
-        <h2>三步，清掉水印。</h2>
+        <h2>使用说明</h2>
       </div>
       <button class="icon-button" id="closeHelpBtn" type="button" aria-label="关闭">
         <svg><use href="#i-x"/></svg>
@@ -478,7 +364,7 @@
     <div class="help-body">
       <ol class="help-steps">
         <li><span>01</span><div><strong>上传画面</strong><p>拖入、选择或直接粘贴照片，可一次选多张。支持 JPG、PNG、WebP，单张最大 40MB；导入的图片都会进入底部队列，可以拖动缩略图排序、点缩略图上的 × 移除，各自保留遮罩。</p></div></li>
-        <li><span>02</span><div><strong>涂抹水印</strong><p>用画笔覆盖水印；拖动笔刷尺寸时，画面上会显示同尺寸圆环。按住 <kbd>X</kbd> 可临时换成橡皮擦掉多涂的部分，松开回到画笔；两张笔刷的尺寸分别记忆。水印有投影时把遮罩扩展调到 8–12px。</p></div></li>
+        <li><span>02</span><div><strong>涂抹水印</strong><p>用画笔覆盖水印。再次点击当前画笔或橡皮，即可拖动滑杆或输入像素值调整大小。按住 <kbd>X</kbd> 可临时换成橡皮擦掉多涂的部分，松开回到画笔；两张笔刷的尺寸分别记忆。水印有投影时把遮罩扩展调到 8–12px。</p></div></li>
         <li><span>03</span><div><strong>重建画面</strong><p>点击“开始去水印”。LaMa 会在本机完成推理；在对比视图里拖动画面任意位置即可查看前后效果，然后下载 PNG。</p></div></li>
       </ol>
       <div class="help-grid">
@@ -511,7 +397,7 @@
 
   <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 
-  <script src="/static/app.js?v=20261122b" defer></script>
+  <script src="/static/app.js?v=20261122f" defer></script>
 </body>
 </html>
 

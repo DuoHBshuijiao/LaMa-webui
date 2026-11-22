@@ -41,7 +41,7 @@ def main() -> None:
         controls = {
             "viewSwitch": page.locator("#viewSwitch").is_visible(),
             "edit": page.locator("#editMaskBtn").is_visible(),
-            "replace": page.locator("#replaceBtn").is_visible(),
+            "imageInfo": page.locator("#fileInfo").is_visible(),
         }
         print("1024 controls:", controls)
         page.close()
