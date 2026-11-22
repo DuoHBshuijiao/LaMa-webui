@@ -516,11 +516,9 @@
   }
 
   function clampPan() {
-    const rect = el.stage.getBoundingClientRect();
-    const scaledW = state.fitW * state.zoom;
-    const scaledH = state.fitH * state.zoom;
-    const maxX = Math.max(34, (scaledW - rect.width) / 2 + 64);
-    const maxY = Math.max(28, (scaledH - rect.height) / 2 + 64);
+    // Let every image edge reach the stage center so corners can be painted there.
+    const maxX = state.fitW * state.zoom / 2;
+    const maxY = state.fitH * state.zoom / 2;
     state.panX = clamp(state.panX, -maxX, maxX);
     state.panY = clamp(state.panY, -maxY, maxY);
   }
@@ -2087,8 +2085,10 @@
         runInpaint();
         return;
       }
-      if (event.code === "Space" && !event.repeat) {
+      if (event.code === "Space" && state.image) {
+        // A repeat can arm the focused zoom button for a click on keyup.
         event.preventDefault();
+        if (event.repeat) return;
         state.spaceDown = true;
         el.artboard.classList.add("is-pan-ready");
         el.brushCursor.hidden = true;
@@ -2153,9 +2153,10 @@
     });
 
     document.addEventListener("keyup", (event) => {
-      if (event.code === "Space") {
+      if (event.code === "Space" && state.spaceDown) {
+        event.preventDefault();
         state.spaceDown = false;
-        el.artboard.classList.remove("is-pan-ready");
+        el.artboard.classList.toggle("is-pan-ready", state.tool === "pan");
       }
       if (event.key.toLowerCase() === "x") releaseToolHold();
     });

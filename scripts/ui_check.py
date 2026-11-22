@@ -4,7 +4,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -14,6 +14,65 @@ SHOTS = ROOT / ".cache" / "shots"
 SHOTS.mkdir(parents=True, exist_ok=True)
 URL = "http://127.0.0.1:7860"
 EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+
+
+def check_space_pan_after_zoom(page: Page) -> None:
+    artboard = page.locator("#artboard")
+    for button_id in ("zoomInBtn", "zoomOutBtn"):
+        page.locator(f"#{button_id}").click()
+        before = artboard.bounding_box()
+        assert before is not None
+        x = before["x"] + before["width"] / 2
+        y = before["y"] + before["height"] / 2
+        page.mouse.move(x, y)
+        page.keyboard.down("Space")
+        page.mouse.down()
+        page.keyboard.down("Space")  # Auto-repeat while dragging.
+        page.mouse.move(x + 16, y + 12)
+        page.mouse.up()
+        page.keyboard.up("Space")
+
+        after = artboard.bounding_box()
+        assert after is not None
+        assert after["width"] == before["width"], f"Space changed zoom after {button_id}"
+        assert after["x"] > before["x"] and after["y"] > before["y"], "Drag did not pan"
+    page.locator("#fitBtn").click()
+
+
+def check_pan_corners_to_center(page: Page) -> None:
+    artboard = page.locator("#artboard")
+    stage = page.locator("#stage").bounding_box()
+    assert stage is not None
+    center_x = stage["x"] + stage["width"] / 2
+    center_y = stage["y"] + stage["height"] / 2
+
+    for horizontal, vertical in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+        page.locator("#fitBtn").click()
+        page.locator("#zoomInBtn").click()
+        before = artboard.bounding_box()
+        assert before is not None
+        # Grab a visible point even if the corner starts outside the stage.
+        x = center_x + horizontal * (min(before["width"], stage["width"]) / 2 - 16)
+        y = center_y + vertical * (min(before["height"], stage["height"]) / 2 - 16)
+        page.mouse.move(x, y)
+        page.keyboard.down("Space")
+        page.mouse.down()
+        page.mouse.move(
+            x - horizontal * (before["width"] / 2 + 8),
+            y - vertical * (before["height"] / 2 + 8),
+        )
+        page.mouse.up()
+        page.keyboard.up("Space")
+
+        after = artboard.bounding_box()
+        assert after is not None
+        corner_x = after["x"] + (after["width"] if horizontal > 0 else 0)
+        corner_y = after["y"] + (after["height"] if vertical > 0 else 0)
+        assert abs(corner_x - center_x) <= 1 and abs(corner_y - center_y) <= 1, (
+            f"Corner ({horizontal}, {vertical}) stopped at ({corner_x}, {corner_y}) "
+            f"instead of stage center ({center_x}, {center_y})"
+        )
+    page.locator("#fitBtn").click()
 
 
 def run(viewport: dict, suffix: str, wait_result: bool = True) -> None:
@@ -34,6 +93,8 @@ def run(viewport: dict, suffix: str, wait_result: bool = True) -> None:
         coverage = page.locator("#maskLabel").inner_text()
         dims = page.locator("#dimsLabel").inner_text()
         page.screenshot(path=str(SHOTS / f"02-editor-{suffix}.png"), full_page=False)
+        check_space_pan_after_zoom(page)
+        check_pan_corners_to_center(page)
 
         if wait_result:
             page.locator("#runBtn").click()
